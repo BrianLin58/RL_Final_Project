@@ -59,6 +59,7 @@ class VideoEnv(Env):
         self.current_frame_idx = 0
         self.close()  # clean up previous temp dir if any
         self.tmp_dir = tempfile.TemporaryDirectory()
+        self.sample_dir = os.path.dirname(self.LQ_dir)
 
         # read initial frames
         for idx in range(self.stack):
@@ -99,9 +100,13 @@ class VideoEnv(Env):
         cv2.imwrite(path, enhanced_frame)
         
         # TODO: calculate reward
-        miou_1 = evaluate_sequence_miou(self.tmp_dir, index=self.current_frame_idx)
-        miou_0 = evaluate_sequence_miou(self.LQ_dir,  index=self.current_frame_idx)
+        # tmp_parent = os.path.dirname(self.tmp_dir.name)
+        # LQ_parent = os.path.dirname(self.LQ_dir)
+        print(f"self.sample_dir = {self.sample_dir}")
+        miou_1 = evaluate_sequence_miou(self.tmp_dir.name, os.path.join(self.sample_dir, "groundtruth.txt"), index=self.current_frame_idx)
+        miou_0 = evaluate_sequence_miou(self.LQ_dir, os.path.join(self.sample_dir, "groundtruth.txt"), index=self.current_frame_idx)
         reward = miou_1 - miou_0
+        print(f"reward = {reward}")
         
         info = {
             'action': action,

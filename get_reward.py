@@ -51,7 +51,7 @@ def run_opencv_tracker(frames_dir, init_bbox, output_file="pred.txt"):
 # --------------------------------------------------------
 # High-level evaluation pipeline
 # --------------------------------------------------------
-def evaluate_sequence_miou(seq_dir, index=None):
+def evaluate_sequence_miou(seq_dir, gt_path, index=None):
     """
     seq_dir: folder containing frames (0001.jpg, ...) under "original/"
     init_bbox: (x, y, w, h)
@@ -61,7 +61,10 @@ def evaluate_sequence_miou(seq_dir, index=None):
     """
 
     # 0. Get bbox
-    with open(os.path.join(seq_dir, "../groundtruth.txt"), 'r') as f:
+    # parent = os.path.dirname(os.path.abspath(seq_dir))
+    # parent = os.path.dirname(os.path.abspath(parent))
+    # gt_path = os.path.join(parent, "groundtruth.txt")
+    with open(gt_path, 'r') as f:
         line = f.readline().strip()
 
     # handle "347.0000,443.0000,429.0000,272.0000" or space separated
@@ -79,7 +82,6 @@ def evaluate_sequence_miou(seq_dir, index=None):
 
     # 2. Ground truth file is in parent folder
     parent = os.path.dirname(os.path.abspath(seq_dir))
-    gt_path = os.path.join(parent, "groundtruth.txt")
 
     # 3. Compute mIoU
     miou = calc_miou(gt_path, pred_path, num_frames=index)
@@ -92,5 +94,5 @@ def evaluate_sequence_miou(seq_dir, index=None):
 if __name__ == "__main__":
     seq_dir = "data/GOT10/train/GOT-10k_Train_000001/original" # test
 
-    reward = evaluate_sequence_miou(seq_dir, index=None)
+    reward = evaluate_sequence_miou(seq_dir, os.path.dirname(seq_dir), index=None)
     print("Reward (mIoU):", reward)

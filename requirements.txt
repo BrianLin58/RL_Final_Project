@@ -2,3 +2,4 @@ stable-baselines3
 wandb
 tensorboard
 opencv-python
+opencv-contrib-python
