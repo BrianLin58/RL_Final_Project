@@ -2,3 +2,5 @@
 **/videos/**
 events.out.tfevents.*
 **/examples/**
+pbs1.sh
+TransformerTrack/*
