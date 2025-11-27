@@ -2,7 +2,12 @@
 **/videos/**
 events.out.tfevents.*
 **/examples/**
+
 pbs1.sh
+
 TransformerTrack/*
-!TransformerTrack/pytracking/run_frames.py
 !TransformerTrack/calc_similarity.py
+
+!TransformerTrack/pytracking/
+TransformerTrack/pytracking/*
+!TransformerTrack/pytracking/run_frames.py
