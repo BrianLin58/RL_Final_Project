@@ -40,8 +40,8 @@ class VideoEnv(Env):
         self.sliding_window = []    # sliding window of frames
         self.current_frame_idx = 0  # next frame index to read
         self.tmp_dir = None         # temporary directory for enhanced frames
-        self.resolution = (0, 0)    # original frame resolution (width, height)
         self.LQ_dir = None          # path to low quality video
+        self.image = None           # current frame in full resolution
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -59,25 +59,21 @@ class VideoEnv(Env):
         self.current_frame_idx = 0
         self.close()  # clean up previous temp dir if any
         self.tmp_dir = tempfile.TemporaryDirectory()
-        self.resolution = cv2.imread(self.frames[0]).shape[:2]      # (height, width)
-        self.resolution = (self.resolution[1], self.resolution[0])  # (width, height)
 
         # read initial frames
         for idx in range(self.stack):
-            image = cv2.imread(self.frames[self.current_frame_idx])
+            self.image = cv2.imread(self.frames[self.current_frame_idx])
             self.current_frame_idx += 1
-            image = self._preprocess(image)
-            self.sliding_window.append(copy.deepcopy(image))
             # Save original frame to temporary directory
             if self.current_frame_idx < self.stack:
                 path = os.path.join(self.tmp_dir.name, f"{self.current_frame_idx:08d}.jpg")
-                image = self._postprocess(image)
-                cv2.imwrite(path, image)
+                cv2.imwrite(path, self.image)
+            preprocessed_image = self._preprocess(self.image, resize=True)
+            self.sliding_window.append(copy.deepcopy(preprocessed_image))
 
         return self._get_obs(), {}
 
     def step(self, action):
-        # TODO: calculate reward
         # reward = 1.0  # testing
         done = False
         truncate = False
@@ -85,7 +81,7 @@ class VideoEnv(Env):
         
         # Apply enhancements to current frame based on action
         self.sliding_window[-1] = self._apply_enhancements(self.sliding_window[-1], action)
-        enhanced_frame = copy.deepcopy(self.sliding_window[-1])
+
         # # Get the most recent frame
         # enhanced_frame = copy.deepcopy(self.sliding_window[-1])
         
@@ -97,13 +93,15 @@ class VideoEnv(Env):
 
         # Save enhanced frame to temporary directory
         path = os.path.join(self.tmp_dir.name, f"{self.current_frame_idx:08d}.jpg")
+        enhanced_frame = self._preprocess(self.image, resize=False)
+        enhanced_frame = self._apply_enhancements(enhanced_frame, action)
         enhanced_frame = self._postprocess(enhanced_frame)
         cv2.imwrite(path, enhanced_frame)
         
         # TODO: calculate reward
-        miou0 = evaluate_sequence_miou(self.tmp_dir, index=self.current_frame_idx)
-        miou1 = evaluate_sequence_miou(self.LQ_dir, index=self.current_frame_idx)
-        reward = miou0 - miou1
+        miou_1 = evaluate_sequence_miou(self.tmp_dir, index=self.current_frame_idx)
+        miou_0 = evaluate_sequence_miou(self.LQ_dir,  index=self.current_frame_idx)
+        reward = miou_1 - miou_0
         
         info = {
             'action': action,
@@ -116,24 +114,24 @@ class VideoEnv(Env):
             done = True # end of video
         else:
             self.sliding_window.pop(0)  
-            image = cv2.imread(self.frames[self.current_frame_idx])
+            self.image = cv2.imread(self.frames[self.current_frame_idx])
             self.current_frame_idx += 1
-            image = self._preprocess(image)
-            self.sliding_window.append(copy.deepcopy(image))
+            preprocessed_image = self._preprocess(self.image, resize=True)
+            self.sliding_window.append(copy.deepcopy(preprocessed_image))
 
         return self._get_obs(), reward, done, truncate, info
 
-    def _preprocess(self, frame: np.ndarray) -> np.ndarray:
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)                # convert BGR to RGB
-        frame = cv2.resize(frame, (self.frame_size, self.frame_size)) # resize to (frame_size, frame_size)
-        frame = frame.astype(np.float32) / 255.0                      # normalize to [0, 1]
-        frame = np.transpose(frame, (2, 0, 1))                        # (height, width, channels) to (channels, height, width)
+    def _preprocess(self, frame: np.ndarray, resize) -> np.ndarray:
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # convert BGR to RGB
+        if resize:                                      # resize to (frame_size, frame_size)
+            frame = cv2.resize(frame, (self.frame_size, self.frame_size))
+        frame = frame.astype(np.float32) / 255.0        # normalize to [0, 1]
+        frame = np.transpose(frame, (2, 0, 1))          # (height, width, channels) to (channels, height, width)
         return frame
     
     def _postprocess(self, frame: np.ndarray) -> np.ndarray:
         frame = np.transpose(frame, (1, 2, 0))
-        frame = (frame * 255).astype(np.uint8)
-        frame = cv2.resize(frame, self.resolution)
+        frame = (frame * 255.0).astype(np.uint8)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         return frame
     
@@ -184,26 +182,26 @@ class VideoEnv(Env):
         
         return frame.astype(np.float32)
 
-    def _calculate_reward(self, enhanced_frame, original_frame):
-        """
-        Calculate reward based on improvement in tracking performance
+    # def _calculate_reward(self, enhanced_frame, original_frame):
+    #     """
+    #     Calculate reward based on improvement in tracking performance
         
-        TODO: Implement this based on your single object tracking metric
-        For now, returns a dummy reward
+    #     TODO: Implement this based on your single object tracking metric
+    #     For now, returns a dummy reward
         
-        You might want to:
-        1. Run tracking on both enhanced and original frames
-        2. Compare tracking confidence/accuracy
-        3. Return the improvement as reward
-        """
-        # Placeholder reward calculation
-        # You should replace this with actual tracking performance comparison
+    #     You might want to:
+    #     1. Run tracking on both enhanced and original frames
+    #     2. Compare tracking confidence/accuracy
+    #     3. Return the improvement as reward
+    #     """
+    #     # Placeholder reward calculation
+    #     # You should replace this with actual tracking performance comparison
         
-        # Example: negative of mean squared error (higher is better)
-        # This is just a placeholder - replace with actual tracking metric
-        reward = -np.mean((enhanced_frame - original_frame) ** 2)
+    #     # Example: negative of mean squared error (higher is better)
+    #     # This is just a placeholder - replace with actual tracking metric
+    #     reward = -np.mean((enhanced_frame - original_frame) ** 2)
         
-        return float(reward)
+    #     return float(reward)
     
     def close(self):
         if self.tmp_dir is not None:
