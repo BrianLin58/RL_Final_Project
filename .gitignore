@@ -6,11 +6,4 @@ events.out.tfevents.*
 pbs1.sh
 
 TransformerTrack/*
-!TransformerTrack/calc_similarity.py
 
-!TransformerTrack/pytracking/
-TransformerTrack/pytracking/*
-!TransformerTrack/pytracking/run_frames.py
-
-frame.e9018
-frame.o9018
