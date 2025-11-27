@@ -11,6 +11,7 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 import torch
 import torch.nn as nn
+import numpy as np
 
 class Map3DCNN(BaseFeaturesExtractor):
     """
@@ -49,20 +50,34 @@ register(
 )
 
 # Set hyper params (configurations) for training
+# my_config = {
+#     "run_id": "example",
+#     "algorithm": SAC,
+#     "policy_network": "CnnPolicy",
+#     "save_path": "models/sample_model",
+#     "num_train_envs": 4,
+#     "epoch_num": 5,
+#     "buffer_size": 100000,
+#     "timesteps_per_epoch": 100,
+#     "eval_episode_num": 10
+# }
+
 my_config = {
-    "run_id": "example",
-    "algorithm": SAC,
+    "run_id": "video_enhancement",
+    "algorithm": PPO,  # PPO works well with discrete actions
     "policy_network": "CnnPolicy",
-    "save_path": "models/sample_model",
+    "save_path": "models/video_enhancement_model",
     "num_train_envs": 4,
-    "epoch_num": 5,
-    "buffer_size": 100000,
-    "timesteps_per_epoch": 100,
-    "eval_episode_num": 10
+    "epoch_num": 20,
+    "timesteps_per_epoch": 5000,
+    "eval_episode_num": 5,
+    "batch_size": 64,
+    "n_steps": 2048
 }
 
 def make_env():
     env = gym.make('VideoEnv-v0')
+    env = Monitor(env)
     return env
 
 def eval(env, model, eval_episode_num):
@@ -80,7 +95,11 @@ def eval(env, model, eval_episode_num):
         while not done:
             action, _state = model.predict(obs, deterministic=True)
             obs, reward, done, info = env.step(action)
-            ep_reward += reward[0]
+            # Handle vectorized environment
+            if isinstance(reward, (list, np.ndarray)):
+                ep_reward += reward[0]
+            else:
+                ep_reward += reward
 
         total_reward += ep_reward
 
@@ -162,13 +181,28 @@ if __name__ == "__main__":
     
     # Create model from loaded config and train
     # Note: Set verbose to 0 if you don't want info messages
+    # model = my_config["algorithm"](
+    #     my_config["policy_network"], 
+    #     train_env, 
+    #     verbose=1,
+    #     device=device,
+    #     tensorboard_log=my_config["run_id"],
+    #     buffer_size=my_config["buffer_size"],
+    #     policy_kwargs=policy_kwargs
+    # )
     model = my_config["algorithm"](
-        my_config["policy_network"], 
-        train_env, 
-        verbose=1,
-        device=device,
-        tensorboard_log=my_config["run_id"],
-        buffer_size=my_config["buffer_size"],
-        policy_kwargs=policy_kwargs
-    )
+            my_config["policy_network"], 
+            train_env, 
+            verbose=1,
+            device=device,
+            tensorboard_log=my_config["run_id"],
+            policy_kwargs=policy_kwargs,
+            learning_rate=3e-4,
+            n_steps=my_config["n_steps"],
+            batch_size=my_config["batch_size"],
+            n_epochs=10,
+            gamma=0.99,
+            gae_lambda=0.95,
+            clip_range=0.2,
+        )
     train(eval_env, model, my_config)

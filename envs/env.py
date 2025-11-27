@@ -34,6 +34,8 @@ class VideoEnv(Env):
 
         self.cap = None     # video capture object
         self.frames = []    # sliding window of frames
+        self.original_frames = []
+        self.current_frame_idx = 0
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -45,13 +47,17 @@ class VideoEnv(Env):
         self.close()
         self.cap = cv2.VideoCapture(video)
         self.frames = []
+        self.original_frames = []    # original frames for reward calculation
+        self.current_frame_idx = 0
 
         # read initial frames
         for frame_idx in range(self.stack):
             ok, frame = self.cap.read()
             if not ok:
                 raise RuntimeError("The video is shorter than the sliding window.")
-            self.frames.append(self._preprocess(frame))
+            original = self._preprocess(frame)
+            self.original_frames.append(original.copy())
+            self.frames.append(original)
 
         return self._get_obs(), {}
 
@@ -64,11 +70,33 @@ class VideoEnv(Env):
         truncate = False
         info = {}
         
+        # Apply enhancements to current frame based on action
+        # Get the most recent frame
+        enhanced_frame = self.frames[-1].copy()
+        
+        # Apply each enhancement operation
+        enhanced_frame = self._apply_enhancements(enhanced_frame, action)
+        
+        # Replace the last frame with enhanced version
+        self.frames[-1] = enhanced_frame
+        
+        reward  = self._calculate_reward(enhanced_frame, self.original_frames[-1])
+        
+        info = {
+            'action': action,
+            'frame_index': self.current_frame_idx
+        }
+        
         # read next frame
         ok, frame = self.cap.read()
         if ok:
+            self.current_frame_idx += 1
+            original = self._preprocess(frame)
             self.frames.pop(0)
-            self.frames.append(self._preprocess(frame))
+            self.original_frames.pop(0)
+            
+            self.frames.append(original.copy())
+            self.original_frames.append(original)
         else:
             done = True # end of video
 
@@ -127,6 +155,27 @@ class VideoEnv(Env):
         frame = np.transpose(frame, (2, 0, 1))
         
         return frame.astype(np.float32)
+
+    def _calculate_reward(self, enhanced_frame, original_frame):
+        """
+        Calculate reward based on improvement in tracking performance
+        
+        TODO: Implement this based on your single object tracking metric
+        For now, returns a dummy reward
+        
+        You might want to:
+        1. Run tracking on both enhanced and original frames
+        2. Compare tracking confidence/accuracy
+        3. Return the improvement as reward
+        """
+        # Placeholder reward calculation
+        # You should replace this with actual tracking performance comparison
+        
+        # Example: negative of mean squared error (higher is better)
+        # This is just a placeholder - replace with actual tracking metric
+        reward = -np.mean((enhanced_frame - original_frame) ** 2)
+        
+        return float(reward)
     
     def close(self):
         if self.cap is not None:
@@ -136,31 +185,51 @@ class VideoEnv(Env):
         """Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)"""
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         
+        # Create a copy to avoid modifying original
+        result = np.zeros_like(frame)
+        
         # Apply CLAHE to each channel
         for i in range(3):
-            frame[:, :, i] = clahe.apply(frame[:, :, i])
+            result[:, :, i] = clahe.apply(frame[:, :, i])
         
-        return frame
+        return result
 
     def _apply_brightness(self, frame, delta):
         """Apply brightness adjustment: I' = I + delta"""
-        return frame + delta
+        result = frame + delta
+        return np.clip(result, 0.0, 1.0)
 
     def _apply_contrast(self, frame, alpha):
         """Apply contrast adjustment: I' = alpha * (I - 0.5) + 0.5"""
-        return alpha * (frame - 0.5) + 0.5
+        result = alpha * (frame - 0.5) + 0.5
+        return np.clip(result, 0.0, 1.0)
 
     def _apply_sharpen(self, frame, lambda_val):
         """Apply sharpening: I' = I + lambda * (I - blur(I))"""
         if lambda_val == 0:
             return frame
         
-        # Apply Gaussian blur
-        blurred = cv2.GaussianBlur(frame, (5, 5), 1.0)
+        # Apply Gaussian blur with error handling
+        try:
+            blurred = cv2.GaussianBlur(frame, (5, 5), 1.0)
+        except:
+            # If blur fails, return original
+            return frame
         
         # Sharpen
-        return frame + lambda_val * (frame - blurred)
+        result = frame + lambda_val * (frame - blurred)
+        
+        # Remove any NaN and clip
+        result = np.nan_to_num(result, nan=0.0, posinf=1.0, neginf=0.0)
+        return np.clip(result, 0.0, 1.0)
 
     def _apply_gamma(self, frame, gamma):
         """Apply gamma correction: I' = I^gamma"""
-        return np.power(frame, gamma)
+        # Add small epsilon to avoid issues with zero values
+        epsilon = 1e-7
+        frame_safe = np.clip(frame, epsilon, 1.0)
+        result = np.power(frame_safe, gamma)
+        
+        # Remove any NaN that might appear
+        result = np.nan_to_num(result, nan=0.5, posinf=1.0, neginf=0.0)
+        return np.clip(result, 0.0, 1.0)
