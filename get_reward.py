@@ -1,11 +1,6 @@
 import os
 import sys
 
-THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-TT_ROOT = os.path.join(THIS_DIR, "TransformerTrack")
-if TT_ROOT not in sys.path:
-    sys.path.insert(0, TT_ROOT)
-
 from pytracking.run_frames import track_folder
 from calc_similarity import calc_miou
 
