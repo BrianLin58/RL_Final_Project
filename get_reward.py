@@ -1,13 +1,11 @@
 import os
 import sys
 
-# 1. Add TransformerTrack directory to sys.path
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 TT_ROOT = os.path.join(THIS_DIR, "TransformerTrack")
 if TT_ROOT not in sys.path:
     sys.path.insert(0, TT_ROOT)
 
-# 2. Now we can import exactly like when we were inside TransformerTrack
 from pytracking.run_frames import track_folder
 from calc_similarity import calc_miou
 
