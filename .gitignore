@@ -11,3 +11,6 @@ TransformerTrack/*
 !TransformerTrack/pytracking/
 TransformerTrack/pytracking/*
 !TransformerTrack/pytracking/run_frames.py
+
+frame.e9018
+frame.o9018

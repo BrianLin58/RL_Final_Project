@@ -5,6 +5,7 @@ import random
 import tempfile
 import numpy as np
 from gymnasium import Env, spaces
+from get_reward import evaluate_sequence_miou
 
 class VideoEnv(Env):
     def __init__(self, video_dir="data/GOT10/train", frame_size=60, stack=3):
@@ -40,15 +41,16 @@ class VideoEnv(Env):
         self.current_frame_idx = 0  # next frame index to read
         self.tmp_dir = None         # temporary directory for enhanced frames
         self.resolution = (0, 0)    # original frame resolution (width, height)
+        self.LQ_dir = None          # path to low quality video
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
         # random select a video
         videos = [f for f in os.listdir(self.video_dir)]
-        frames_dir = os.path.join(self.video_dir, random.choice(videos), "degraded")
-        self.frames = [f for f in os.listdir(frames_dir) if f.endswith(".jpg")]
-        self.frames = [os.path.join(frames_dir, f) for f in self.frames]
+        self.LQ_dir = os.path.join(self.video_dir, random.choice(videos), "degraded")
+        self.frames = [f for f in os.listdir(self.LQ_dir) if f.endswith(".jpg")]
+        self.frames = [os.path.join(self.LQ_dir, f) for f in self.frames]
 
         self.video_length = len(self.frames)
         if self.video_length < self.stack:
@@ -76,7 +78,7 @@ class VideoEnv(Env):
 
     def step(self, action):
         # TODO: calculate reward
-        reward = 1.0  # testing
+        # reward = 1.0  # testing
         done = False
         truncate = False
         info = {}
@@ -99,7 +101,9 @@ class VideoEnv(Env):
         cv2.imwrite(path, enhanced_frame)
         
         # TODO: calculate reward
-        # reward = self._calculate_reward()
+        miou0 = evaluate_sequence_miou(self.tmp_dir, index=self.current_frame_idx)
+        miou1 = evaluate_sequence_miou(self.LQ_dir, index=self.current_frame_idx)
+        reward = miou0 - miou1
         
         info = {
             'action': action,
