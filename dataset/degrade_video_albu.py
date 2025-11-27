@@ -1,3 +1,4 @@
+# usage example: python dataset/degrade_video_albu.py --input_root ../dataset/GOT10/val/GOT-10k_Val_000002 --output_root data/GOT10/val/ --make_video
 import os
 import cv2
 import numpy as np
@@ -5,7 +6,7 @@ from tqdm import tqdm
 import albumentations as A
 import argparse
 import shutil
-
+import yaml
 
 # ===========================
 # Helper Functions
@@ -93,9 +94,28 @@ def make_video(frames_folder, out_path, fps=30):
     writer.release()
     print(f"[INFO] Video saved: {out_path}")
 
-# ===========================
-# Degradation Pipeline
-# ===========================
+
+# =========================================
+# CONFIG PARSER
+# =========================================
+def load_config(cfg_path):
+    with open(cfg_path, "r") as f:
+        return yaml.safe_load(f)
+
+
+def build_transform_from_config(cfg):
+    aug_list = []
+    for aug in cfg["augmentations"]:
+        aug_type = getattr(A, aug["type"])
+        params = aug.get("params", {})
+        p = aug.get("p", 1.0)
+        aug_list.append(aug_type(p=p, **params))
+
+    return A.Compose(aug_list)
+
+'''
+# below is deprecated
+'
 def build_video_transform():
     """
     A flicker-free video degradation pipeline.
@@ -109,9 +129,12 @@ def build_video_transform():
         A.GaussNoise(mean_range=[-0.2, -0.2], p=1.0),
         A.ImageCompression(quality_range=[10, 40], p=1.0),
     ])
+'''
+# ===========================
+# Degradation Pipeline
+# ===========================
 
-
-def degrade_single_sequence(seq_folder, input_root, output_root, make_vid = False):
+def degrade_single_sequence(seq_folder, input_root, output_root, cfg, make_vid = False):
     print(f"[INFO] Processing sequence: {seq_folder}")
 
     # Mirror directory structure
@@ -125,7 +148,8 @@ def degrade_single_sequence(seq_folder, input_root, output_root, make_vid = Fals
     mkdir(out_seq_root)
 
     video, frame_files = load_frames_as_video(seq_folder)
-    transform = build_video_transform()
+    transform = build_transform_from_config(cfg)
+    # transform = build_video_transform()
     augmented = transform(images=video)
     degraded = augmented["images"]
 
@@ -153,15 +177,18 @@ if __name__ == "__main__":
     parser.add_argument("--output_root", required=True,
                         help="Output dataset root (will mirror structure)")
     parser.add_argument("--make_video", action="store_true")
+    parser.add_argument("--config_path", default="dataset/default_aug.yaml", type = str)
     args = parser.parse_args()
 
     input_root = args.input_root
     output_root = args.output_root
 
+    cfg = load_config(args.config_path)
+
     # Case 1: Direct sequence folder
     if is_sequence_folder(input_root):
         # print(f"[DEBUG] input_root = {input_root}, dirname = {os.path.dirname(input_root)}, output_root = {output_root}")
-        degrade_single_sequence(input_root, os.path.dirname(input_root), output_root, args.make_video)
+        degrade_single_sequence(input_root, os.path.dirname(input_root), output_root, cfg, args.make_video)
         exit()
 
     # Case 2: Folder of many sequences
@@ -172,4 +199,4 @@ if __name__ == "__main__":
 
     print(f"[INFO] Found {len(seqs)} sequences.")
     for seq in seqs:
-        degrade_single_sequence(seq, input_root, output_root, args.make_video)
+        degrade_single_sequence(seq, input_root, output_root, cfg, args.make_video)

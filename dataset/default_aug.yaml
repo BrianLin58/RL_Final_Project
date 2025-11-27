@@ -1,0 +1,31 @@
+augmentations:
+  - type: MotionBlur
+    params:
+      blur_limit: 37
+      allow_shifted: False
+    p: 1.0
+
+  - type: GaussianBlur
+    params:
+      blur_limit: [0, 0]
+      sigma_limit: [1.0, 2.5]
+    p: 1.0
+
+  - type: Downscale
+    params:
+      scale_range: [0.1, 0.1]
+    p: 1.0
+
+  - type: GaussNoise
+    params:
+      mean_range: [-0.2, -0.2]
+    p: 1.0
+
+  - type: ImageCompression
+    params:
+      quality_range: [10, 40]
+    p: 1.0
+
+settings:
+  seed: 42
+  keep_original_size: true
