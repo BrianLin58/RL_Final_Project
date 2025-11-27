@@ -5,7 +5,7 @@ import numpy as np
 from gymnasium import Env, spaces
 
 class VideoEnv(Env):
-    def __init__(self, video_dir="D:/Courses/114-1/RL/Final_Project/videos", frame_size=64, stack=3):
+    def __init__(self, video_dir="videos", frame_size=64, stack=3):
         self.video_dir = video_dir    # path to video directory
         self.frame_size = frame_size  # height and width of each frame
         self.stack = stack            # sliding window size
