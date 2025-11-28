@@ -32,3 +32,36 @@ class PlaceholderEncoder:
         final = np.concatenate(processed, axis=0)  # (3*stack, S, S)
 
         return final
+
+import torch
+import torch.nn as nn
+import torchvision.models as models
+
+class ResNet18Encoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # Load pretrained ResNet18
+        resnet = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+        # Remove the final fully-connected layer
+        self.feature_extractor = nn.Sequential(*list(resnet.children())[:-1])  # output: (B, 512, 1, 1)
+
+        # Freeze encoder parameters
+        for param in self.feature_extractor.parameters():
+            param.requires_grad = False
+
+    def forward(self, x):
+        """
+        x: torch.Tensor, shape (B, 3, H, W)
+        return: (B, 512)
+        """
+        features = self.feature_extractor(x)      # (B, 512, 1, 1)
+        features = torch.flatten(features, 1)     # (B, 512)
+        return features
+
+# Example usage
+if __name__ == "__main__":
+    encoder = ResNet18Encoder()
+    # Suppose we have 3 RGB images of size 1080x1920
+    dummy_input = torch.randn(3, 3, 1080, 1920)
+    output = encoder(dummy_input)
+    print(output.shape)  # torch.Size([3, 512])

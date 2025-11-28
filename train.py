@@ -54,7 +54,7 @@ register(
 #     "run_id": "example",
 #     "algorithm": SAC,
 #     "policy_network": "CnnPolicy",
-#     "save_path": "models/sample_model",
+#     "save_path": "models\\sample_model",
 #     "num_train_envs": 4,
 #     "epoch_num": 5,
 #     "buffer_size": 100000,
@@ -65,8 +65,8 @@ register(
 my_config = {
     "run_id": "video_enhancement",
     "algorithm": PPO,  # PPO works well with discrete actions
-    "policy_network": "CnnPolicy",
-    "save_path": "models/video_enhancement_model",
+    "policy_network": "MlpPolicy", # use MlpPolicy for non-image obs (encoder output)
+    "save_path": "models\\video_enhancement_model",
     "num_train_envs": 1,
     "epoch_num": 1,
     "timesteps_per_epoch": 1,

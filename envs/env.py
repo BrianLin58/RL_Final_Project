@@ -1,16 +1,17 @@
 import os
 import cv2
 import copy
+import torch
 import random
 import tempfile
 import numpy as np
 from gymnasium import Env, spaces
 from get_reward import evaluate_sequence_miou, evaluate_sequence_miou_from_frames
 from utils.parse_bbox_files import parse_bbox_from_files
-from encoder.placeholder_encoder import PlaceholderEncoder
+from encoder.placeholder_encoder import PlaceholderEncoder, ResNet18Encoder
 
 class VideoEnv(Env):
-    def __init__(self, data_dir="data/GOT10/train", frame_size=60, stack=3):
+    def __init__(self, data_dir="data\\GOT10\\train", frame_size=60, stack=3):
         self.data_dir = data_dir      # path to data directory
         self.frame_size = frame_size  # height and width of each frame
         self.stack = stack            # sliding window size
@@ -32,8 +33,10 @@ class VideoEnv(Env):
 
         # observation: (stacked channels, height, width)
         self.observation_space = spaces.Box(
-            low=0.0, high=1.0,
-            shape=(self.stack * 3, self.frame_size, self.frame_size), # stack RGB 3 channels
+            low=-np.inf, high=np.inf,
+            shape=(self.stack, 512),
+            # low=0.0, high=1.0,
+            # shape=(self.stack * 3, self.frame_size, self.frame_size), # stack RGB 3 channels
             # shape = (self.stack * 3, 1080, 1920), # impossible :)
             dtype=np.float32
         )
@@ -43,14 +46,15 @@ class VideoEnv(Env):
         self.lq_frame_paths = []       # list of paths to low quality jpg
         self.gt_boxes = []             # groundtruth bounding boxes
         self.video_length = 0          # number of frames in the video
-        self.sliding_window = []       # sliding window of frames
+        self.sliding_window = []       # sliding window of frames, each (C, H, W) float32 [0,1]
         self.frame_index = 0           # next frame index to read
         # self.tmp_dir = None            # temporary directory for enhanced frames
         self.image = None              # current frame in full resolution
         self.all_lq_frames = []        # stores BGR, HWC data
         self.all_perturbed_frames = [] # stores BGR, HWC data
 
-        self.encoder = PlaceholderEncoder(out_size = self.frame_size)
+        # self.encoder = PlaceholderEncoder(out_size = self.frame_size)
+        self.encoder = ResNet18Encoder()
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -172,7 +176,10 @@ class VideoEnv(Env):
     
     def _get_obs(self):
         # obs = np.concatenate(self.sliding_window, axis=0)
-        obs = self.encoder.encode(self.sliding_window)
+        # obs = self.encoder.encode(self.sliding_window)
+        with torch.no_grad():
+            obs = self.encoder(torch.tensor(self.sliding_window))  # (stack, feature_dim)
+            obs = obs.detach().cpu().numpy()
         return obs.astype(np.float32)
     
     def _apply_enhancements(self, frame, action):
