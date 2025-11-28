@@ -1,10 +1,12 @@
 **/__pycache__/**
+
 **/videos/**
-events.out.tfevents.*
 **/examples/**
 models/*
-pbs1.sh
+events.out.tfevents.*
 
+pbs1.sh
 TransformerTrack/*
 
-frame.*
+**/*.mp4
+/frame.*
