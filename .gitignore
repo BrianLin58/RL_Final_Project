@@ -8,5 +8,5 @@ events.out.tfevents.*
 pbs1.sh
 TransformerTrack/*
 
-**.mp4
+*.mp4
 /frame.*
