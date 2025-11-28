@@ -1,5 +1,6 @@
 import time
 import warnings
+import argparse
 import gymnasium as gym
 from gymnasium.envs.registration import register
 
@@ -80,7 +81,7 @@ def make_env():
     env = Monitor(env)
     return env
 
-def eval(env, model, eval_episode_num):
+def eval(env, model, eval_episode_num, visualize_index):
     """Evaluate the model and return avg_reward"""
     total_reward = 0.0
 
@@ -102,10 +103,13 @@ def eval(env, model, eval_episode_num):
                 ep_reward += reward
 
         total_reward += ep_reward
+        if seed in visualize_index:
+            # env.envs[0].env.visualize(seed)
+            env.env_method("visualize", seed)
 
     return total_reward / eval_episode_num
 
-def train(eval_env, model, config):
+def train(eval_env, model, config, args):
     """Train agent using SB3 algorithm and my_config"""
     
     print(f"\n{'='*60}")
@@ -130,7 +134,7 @@ def train(eval_env, model, config):
 
         # Evaluation
         eval_start = time.time()
-        avg_reward = eval(eval_env, model, config["eval_episode_num"])
+        avg_reward = eval(eval_env, model, config["eval_episode_num"], args.visualize_index)
         eval_duration = time.time() - eval_start
 
         total_duration = time.time() - start_time
@@ -161,6 +165,10 @@ def train(eval_env, model, config):
     print(f"Total time: {total_time:.1f} seconds")
 
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--visualize_index", nargs = "+", type = int, default = [], help = "Visualize at the specified round of evaluation.")
+    args = parser.parse_args()
 
     train_env = SubprocVecEnv([make_env for _ in range(my_config["num_train_envs"])])
 
@@ -205,4 +213,4 @@ if __name__ == "__main__":
             gae_lambda=0.95,
             clip_range=0.2,
         )
-    train(eval_env, model, my_config)
+    train(eval_env, model, my_config, args)

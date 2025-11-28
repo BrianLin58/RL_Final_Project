@@ -302,3 +302,19 @@ class VideoEnv(Env):
         # Remove any NaN that might appear
         result = np.nan_to_num(result, nan=0.5, posinf=1.0, neginf=0.0)
         return np.clip(result, 0.0, 1.0)
+
+    def visualize(self, seed):
+        visualize_dir = f"visualization/{seed}/"
+        os.makedirs(os.path.join(visualize_dir, "lq"), exist_ok=True)
+        os.makedirs(os.path.join(visualize_dir, "perturbed"), exist_ok=True)
+
+        for frame_id, frame in enumerate(self.all_lq_frames):
+            visualize_path = os.path.join(visualize_dir, "lq", f"{(frame_id + 1):08d}.jpg")
+            cv2.imwrite(visualize_path, frame)
+        print(f"[INFO] Done visualization of lq frames index {seed} in directory {visualize_dir}")
+
+        for frame_id, frame in enumerate(self.all_perturbed_frames):
+            visualize_path = os.path.join(visualize_dir, "perturbed", f"{(frame_id + 1):08d}.jpg")
+            cv2.imwrite(visualize_path, frame)
+        print(f"[INFO] Done visualization of perturbed frames {seed} in directory {visualize_dir}")
+
