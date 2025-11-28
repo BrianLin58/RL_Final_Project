@@ -1,56 +1,71 @@
-import os
 import cv2
-from calc_similarity import calc_miou
+from calc_similarity import calc_miou_from_boxes
 
 
 # --------------------------------------------------------
-# OpenCV tracker for a folder of frames
+# Track directly on list of NumPy frames
 # --------------------------------------------------------
-def run_opencv_tracker(frames_dir, init_bbox, output_file="pred.txt"):
+def run_opencv_tracker_on_frames(frames, init_bbox):
     """
-    frames_dir: path to folder containing frames (00000001.jpg, ...)
-    init_bbox: initial bbox in (x, y, w, h)
-    output_file: txt file to save predictions
-
-    Returns: path to output_file
+    frames: list of numpy HxWxC images (RGB or BGR)
+    init_bbox: (x, y, w, h)
+    returns: list of predicted boxes [(x,y,w,h), ...]
     """
 
-    tracker = cv2.TrackerCSRT_create()      # you can change tracker type
-    frame_files = sorted([
-        f for f in os.listdir(frames_dir)
-        if f.lower().endswith((".jpg", ".png"))
-    ])
+    assert len(frames) > 0, "No frames provided."
+    tracker = cv2.TrackerCSRT_create()
 
-    assert len(frame_files) > 0, "No frames found."
+    # Ensure BGR (OpenCV uses BGR)
+    first_frame = frames[0]
+    if first_frame.shape[-1] == 3:
+        pass  # assume already BGR
+    else:
+        raise ValueError("Frame must be HxWx3")
 
-    # Init tracker on first frame
-    first_frame_path = os.path.join(frames_dir, frame_files[0])
-    first_frame = cv2.imread(first_frame_path)
     tracker.init(first_frame, tuple(init_bbox))
 
-    # Save results
-    out_path = os.path.join(frames_dir, output_file)
-    with open(out_path, "w") as f:
-        # first bbox
-        f.write(f"{init_bbox[0]}, {init_bbox[1]}, {init_bbox[2]}, {init_bbox[3]}\n")
+    pred_boxes = [tuple(init_bbox)]
 
-        # update for all other frames
-        for fname in frame_files[1:]:
-            frame = cv2.imread(os.path.join(frames_dir, fname))
-            success, bbox = tracker.update(frame)
+    # Track forward
+    for frame in frames[1:]:
+        success, bbox = tracker.update(frame)
+        if success:
+            x, y, w, h = map(float, bbox)
+            pred_boxes.append((x, y, w, h))
+        else:
+            # failed: append zero-box or copy previous box
+            pred_boxes.append((0, 0, 0, 0))
 
-            if success:
-                x, y, w, h = map(int, bbox)
-                f.write(f"{x}, {y}, {w}, {h}\n")
-            else:
-                f.write("tracking_failed\n")
-
-    return out_path
+    return pred_boxes
 
 
 # --------------------------------------------------------
-# High-level evaluation pipeline
+# Compute mIoU directly from frames + GT boxes
 # --------------------------------------------------------
+def evaluate_sequence_miou_from_frames(frames, gt_boxes, index=None):
+    """
+    frames: list of np.ndarray images
+    gt_boxes: list of (x,y,w,h) ground truth for each frame
+    index: number of frames to evaluate (truncate)
+
+    Returns: mean IoU
+    """
+
+    # The first bbox is used to initialize tracker
+    init_bbox = gt_boxes[0]
+    init_bbox = [int(v) for v in init_bbox]     # mutable list
+    # print(f"[DEBUG] init_bbox = {init_bbox} with type: {type(init_bbox[0])}")
+
+    # Run tracker directly in memory
+    # for i, f in enumerate(frames):
+        # print(f"[DEBUG] i, f.shape = {i}, {f.shape}")
+
+    pred_boxes = run_opencv_tracker_on_frames(frames, init_bbox)
+
+    # Compute IoU
+    miou = calc_miou_from_boxes(gt_boxes, pred_boxes, num_frames=index)
+    return miou
+
 def evaluate_sequence_miou(seq_dir, gt_path, index=None):
     """
     seq_dir: folder containing frames (0001.jpg, ...) under "original/"
@@ -87,12 +102,30 @@ def evaluate_sequence_miou(seq_dir, gt_path, index=None):
     miou = calc_miou(gt_path, pred_path, num_frames=index)
     return miou
 
-
 # --------------------------------------------------------
-# Main test
+# Simple unit test
 # --------------------------------------------------------
 if __name__ == "__main__":
-    seq_dir = "data/GOT10/train/GOT-10k_Train_000001/original" # test
+    import cv2
+    import glob
 
-    reward = evaluate_sequence_miou(seq_dir, os.path.dirname(seq_dir), index=None)
-    print("Reward (mIoU):", reward)
+    # Example: load frames manually just for test
+    frame_paths = sorted(glob.glob("data/GOT10/train/GOT-10k_Train_000001/original/*.jpg"))
+    frames = [cv2.imread(p) for p in frame_paths]
+
+    # Example ground truth
+    gt_boxes = []
+    with open("data/GOT10/train/GOT-10k_Train_000001/groundtruth.txt", 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            line = line.replace(',', ' ')
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            x, y, w, h = map(float, parts[:4])
+            gt_boxes.append((x, y, w, h))
+
+    miou = evaluate_sequence_miou_from_frames(frames, gt_boxes)
+    print("mIoU =", miou)

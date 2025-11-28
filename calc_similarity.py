@@ -4,9 +4,6 @@ import sys
 def parse_boxes(path):
     """
     Read a file where each line is x, y, w, h.
-    Supports both:
-      '347.0000,443.0000,429.0000,272.0000'
-      '347    443    429    272'
     """
     boxes = []
     with open(path, 'r') as f:
@@ -24,10 +21,6 @@ def parse_boxes(path):
 
 
 def iou(box1, box2):
-    """
-    Compute IoU between two boxes given as (x, y, w, h),
-    where (x, y) is top-left corner.
-    """
     x1, y1, w1, h1 = box1
     x2, y2, w2, h2 = box2
 
@@ -52,45 +45,44 @@ def iou(box1, box2):
     return inter_area / union
 
 
-def calc_miou(gt_path, pred_path, num_frames=None):
+# ----------------------------------------------------------
+# NEW: compute mIoU directly from box lists (no file I/O)
+# ----------------------------------------------------------
+def calc_miou_from_boxes(gt_boxes, pred_boxes, num_frames=None):
     """
-    Compute mean IoU between gt and pred box files.
-
-    Parameters
-    ----------
-    gt_path : str
-    pred_path : str
-    num_frames : int or None
-        If not None, only the first `num_frames` frames are used.
-        If None, use all frames (old behavior).
-
-    Returns
-    -------
-    float in [0, 1]
+    Compute mean IoU directly from lists of (x,y,w,h) tuples.
+    gt_boxes : list of (x,y,w,h)
+    pred_boxes : list of (x,y,w,h)
     """
-    gt_boxes = parse_boxes(gt_path)
-    pred_boxes = parse_boxes(pred_path)
 
     if len(gt_boxes) == 0 or len(pred_boxes) == 0:
         raise ValueError("No boxes to compare.")
 
-    # decide how many frames to compare
     if num_frames is None:
         if len(gt_boxes) != len(pred_boxes):
             raise ValueError(
-                f"File lengths differ: {len(gt_boxes)} vs {len(pred_boxes)} lines. "
-                "Please check your input files."
+                f"Different lengths: {len(gt_boxes)} vs {len(pred_boxes)}"
             )
         n = len(gt_boxes)
     else:
-        # clip to what we actually have, just in case
         n = min(num_frames, len(gt_boxes), len(pred_boxes))
 
     ious = [iou(gt_boxes[i], pred_boxes[i]) for i in range(n)]
-    mean_iou = sum(ious) / n
-    return float(mean_iou)
+    return float(sum(ious) / n)
 
 
+# ----------------------------------------------------------
+# OLD interface: still load files, but uses calc_miou_from_boxes()
+# ----------------------------------------------------------
+def calc_miou(gt_path, pred_path, num_frames=None):
+    gt_boxes = parse_boxes(gt_path)
+    pred_boxes = parse_boxes(pred_path)
+    return calc_miou_from_boxes(gt_boxes, pred_boxes, num_frames)
+
+
+# ------------------------------
+# CLI tool (unchanged)
+# ------------------------------
 def main(gt_path, pred_path, num_frames=None):
     if num_frames is None:
         mean_iou = calc_miou(gt_path, pred_path)
@@ -102,7 +94,6 @@ def main(gt_path, pred_path, num_frames=None):
 
 
 if __name__ == "__main__":
-    # allow optional 3rd arg = num_frames
     if len(sys.argv) not in (3, 4):
         print(f"Usage: python {sys.argv[0]} groundtruth.txt video_xxx.txt [num_frames]")
     else:

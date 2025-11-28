@@ -2,7 +2,7 @@
 **/videos/**
 events.out.tfevents.*
 **/examples/**
-
+models/*
 pbs1.sh
 
 TransformerTrack/*

@@ -114,7 +114,7 @@ def train(eval_env, model, config):
 
     print(f"\nModels will be saved to: {config['save_path']}\n")
 
-    best_reward = 0.0
+    best_reward = -100
 
     start_time = time.time()
 

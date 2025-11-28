@@ -1,0 +1,70 @@
+1174, 417, 343, 351
+1177, 411, 343, 351
+1193, 384, 343, 351
+1184, 369, 350, 358
+1180, 396, 350, 358
+1179, 389, 350, 358
+1193, 392, 343, 351
+1302, 401, 336, 344
+1298, 369, 350, 358
+1362, 361, 350, 358
+1418, 399, 350, 358
+1391, 328, 343, 351
+1412, 334, 336, 344
+1477, 331, 343, 351
+1549, 298, 336, 344
+1572, 303, 336, 344
+1606, 310, 330, 337
+1588, 311, 330, 337
+1669, 355, 336, 344
+1671, 375, 336, 344
+1705, 375, 323, 331
+1707, 280, 323, 331
+1754, 270, 330, 337
+1761, 255, 317, 324
+1638, 312, 317, 324
+1690, 285, 323, 331
+1764, 219, 311, 318
+1761, 231, 317, 324
+1757, 205, 323, 331
+1757, 232, 323, 331
+1754, 231, 330, 337
+1754, 234, 330, 337
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+-64, -44, 330, 337
+-116, -30, 336, 344
+-90, -41, 330, 337
+tracking_failed
+-78, -35, 323, 331
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+tracking_failed
+-101, -38, 336, 344
+-73, -45, 330, 337
+-55, -32, 336, 344
+-69, -31, 336, 344
+-81, -27, 330, 337

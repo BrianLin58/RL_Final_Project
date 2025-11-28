@@ -5,7 +5,9 @@ import random
 import tempfile
 import numpy as np
 from gymnasium import Env, spaces
-from get_reward import evaluate_sequence_miou
+from get_reward import evaluate_sequence_miou, evaluate_sequence_miou_from_frames
+from utils.parse_bbox_files import parse_bbox_from_files
+from encoder.placeholder_encoder import PlaceholderEncoder
 
 class VideoEnv(Env):
     def __init__(self, video_dir="data/GOT10/train", frame_size=60, stack=3):
@@ -32,6 +34,7 @@ class VideoEnv(Env):
         self.observation_space = spaces.Box(
             low=0.0, high=1.0,
             shape=(self.stack*3, self.frame_size, self.frame_size), # stack RGB 3 channels
+            # shape = (self.stack * 3, 1920, 1080), # impossible :)
             dtype=np.float32
         )
 
@@ -43,14 +46,17 @@ class VideoEnv(Env):
         self.LQ_dir = None          # path to low quality video
         self.image = None           # current frame in full resolution
 
+        self.encoder = PlaceholderEncoder(out_size = self.frame_size)
+
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
         # random select a video
-        videos = [f for f in os.listdir(self.video_dir)]
-        self.LQ_dir = os.path.join(self.video_dir, random.choice(videos), "degraded")
+        video_list = [f for f in os.listdir(self.video_dir)]
+        self.sample_dir = os.path.join(self.video_dir, random.choice(video_list))
+        self.LQ_dir = os.path.join(self.sample_dir, "degraded")
         self.frames = [f for f in os.listdir(self.LQ_dir) if f.endswith(".jpg")]
-        self.frames = [os.path.join(self.LQ_dir, f) for f in self.frames]
+        self.frames = [os.path.join(self.LQ_dir, f) for f in self.frames] # self.frames is a list of paths to low_quality png
 
         self.video_length = len(self.frames)
         if self.video_length < self.stack:
@@ -59,20 +65,36 @@ class VideoEnv(Env):
         self.current_frame_idx = 0
         self.close()  # clean up previous temp dir if any
         self.tmp_dir = tempfile.TemporaryDirectory()
-        self.sample_dir = os.path.dirname(self.LQ_dir)
+        print(f"[DEBUG] Getting groundtruth bbox...")
+        self.gt_boxes, _ = parse_bbox_from_files(os.path.join(self.sample_dir, "groundtruth.txt"))
 
-        # read initial frames
+        self.all_lq_frames = [] # stores BGR, HWC data
+        for frame_id in range(self.video_length):
+            self.all_lq_frames.append(cv2.imread(self.frames[frame_id]))
+
+        self.all_perturbed_frames = [] # stores BGR, HWC data
+
         for idx in range(self.stack):
-            self.image = cv2.imread(self.frames[self.current_frame_idx])
-            self.current_frame_idx += 1
-            # Save original frame to temporary directory
-            if self.current_frame_idx < self.stack:
-                path = os.path.join(self.tmp_dir.name, f"{self.current_frame_idx:08d}.jpg")
-                cv2.imwrite(path, self.image)
-            preprocessed_image = self._preprocess(self.image, resize=True)
+            self.image = self.all_lq_frames[self.current_frame_idx]
+            self.all_perturbed_frames.append(self.image)
+            preprocessed_image = self._preprocess(self.image, resize = False) # BGR->RGB, HWC->CHW
             self.sliding_window.append(copy.deepcopy(preprocessed_image))
+            self.current_frame_idx += 1
 
         return self._get_obs(), {}
+
+        # read initial frames
+        # for idx in range(self.stack):
+        #     self.image = cv2.imread(self.frames[self.current_frame_idx])
+        #     self.current_frame_idx += 1
+        #     # Save original frame to temporary directory
+        #     if self.current_frame_idx < self.stack:
+        #         path = os.path.join(self.tmp_dir.name, f"{self.current_frame_idx:08d}.jpg")
+        #         cv2.imwrite(path, self.image)
+        #     preprocessed_image = self._preprocess(self.image, resize=True)
+        #     self.sliding_window.append(copy.deepcopy(preprocessed_image))
+
+        # return self._get_obs(), {}
 
     def step(self, action):
         # reward = 1.0  # testing
@@ -81,31 +103,28 @@ class VideoEnv(Env):
         info = {}
         
         # Apply enhancements to current frame based on action
-        self.sliding_window[-1] = self._apply_enhancements(self.sliding_window[-1], action)
-
-        # # Get the most recent frame
-        # enhanced_frame = copy.deepcopy(self.sliding_window[-1])
-        
-        # # Apply each enhancement operation
-        # enhanced_frame = self._apply_enhancements(enhanced_frame, action)
-        
-        # # Replace the last frame with enhanced version
-        # self.sliding_window[-1] = copy.deepcopy(enhanced_frame)
+        self.sliding_window[-1] = self._apply_enhancements(self.sliding_window[-1], action) # RGB, CHW
 
         # Save enhanced frame to temporary directory
-        path = os.path.join(self.tmp_dir.name, f"{self.current_frame_idx:08d}.jpg")
-        enhanced_frame = self._preprocess(self.image, resize=False)
-        enhanced_frame = self._apply_enhancements(enhanced_frame, action)
-        enhanced_frame = self._postprocess(enhanced_frame)
-        cv2.imwrite(path, enhanced_frame)
+        # path = os.path.join(self.tmp_dir.name, f"{self.current_frame_idx:08d}.jpg")
+        # enhanced_frame = self._preprocess(self.image, resize=False)
+        # enhanced_frame = self._apply_enhancements(enhanced_frame, action) # enhanced_frame is now in shape (C, H, W)
+        # enhanced_frame = self._postprocess(enhanced_frame) # enhanced_frame is now BGR, shape (H, W, C)
+        # cv2.imwrite(path, enhanced_frame) # TODO: write a flag to do this
+
+        self.all_perturbed_frames.append(self._postprocess(self.sliding_window[-1]))
+        # TODO: write a flag to store frame here
+
         
         # TODO: calculate reward
         # tmp_parent = os.path.dirname(self.tmp_dir.name)
         # LQ_parent = os.path.dirname(self.LQ_dir)
         print(f"self.sample_dir = {self.sample_dir}")
-        miou_1 = evaluate_sequence_miou(self.tmp_dir.name, os.path.join(self.sample_dir, "groundtruth.txt"), index=self.current_frame_idx)
-        miou_0 = evaluate_sequence_miou(self.LQ_dir, os.path.join(self.sample_dir, "groundtruth.txt"), index=self.current_frame_idx)
-        reward = miou_1 - miou_0
+        # miou_1 = evaluate_sequence_miou(self.tmp_dir.name, os.path.join(self.sample_dir, "groundtruth.txt"), index=self.current_frame_idx)
+        # miou_0 = evaluate_sequence_miou(self.LQ_dir, os.path.join(self.sample_dir, "groundtruth.txt"), index=self.current_frame_idx)
+        miou_after = evaluate_sequence_miou_from_frames(self.all_perturbed_frames, self.gt_boxes, index = self.current_frame_idx)
+        miou_before = evaluate_sequence_miou_from_frames(self.all_lq_frames, self.gt_boxes, index = self.current_frame_idx)
+        reward = miou_after - miou_before
         print(f"reward = {reward}")
         
         info = {
@@ -117,12 +136,17 @@ class VideoEnv(Env):
         if self.current_frame_idx >= self.video_length:
             self.close()
             done = True # end of video
+        # else:
+        #     self.sliding_window.pop(0)  
+        #     self.image = cv2.imread(self.frames[self.current_frame_idx])
+        #     self.current_frame_idx += 1
+        #     preprocessed_image = self._preprocess(self.image, resize=True)
+        #     self.sliding_window.append(copy.deepcopy(preprocessed_image))
         else:
-            self.sliding_window.pop(0)  
-            self.image = cv2.imread(self.frames[self.current_frame_idx])
-            self.current_frame_idx += 1
-            preprocessed_image = self._preprocess(self.image, resize=True)
-            self.sliding_window.append(copy.deepcopy(preprocessed_image))
+            self.sliding_window.pop(0)
+            self.image = self.all_lq_frames[self.current_frame_idx]
+            self.current_frame_idx += 1 # too disgusting
+            self.sliding_window.append(self._preprocess(self.image, resize = False))
 
         return self._get_obs(), reward, done, truncate, info
 
@@ -141,7 +165,8 @@ class VideoEnv(Env):
         return frame
     
     def _get_obs(self):
-        obs = np.concatenate(self.sliding_window, axis=0)
+        # obs = np.concatenate(self.sliding_window, axis=0)
+        obs = self.encoder.encode(self.sliding_window)
         return obs.astype(np.float32)
     
     def _apply_enhancements(self, frame, action):
