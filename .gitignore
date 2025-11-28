@@ -10,3 +10,4 @@ TransformerTrack/*
 
 *.mp4
 /frame.*
+visualization/*
