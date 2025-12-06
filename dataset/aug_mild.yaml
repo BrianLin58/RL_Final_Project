@@ -19,17 +19,19 @@ augmentations:
       scale_range: [0.7, 0.9]
     p: 1.0
 
-  - type: GaussNoise
-    params:
-      # small noise amplitude; your wrapper uses mean_range
-      # (symmetric range around 0 → mild noise)
-      mean_range: [-0.05, 0.05]
-    p: 1.0
 
   - type: ImageCompression
     params:
       # JPEG compression: mild to moderate
       quality_range: [40, 70]
+    p: 1.0
+
+noise:
+  - type: GaussNoise
+    params:
+      # small noise amplitude; your wrapper uses mean_range
+      # (symmetric range around 0 → mild noise)
+      mean_range: [-0.05, 0.05]
     p: 1.0
 
 settings:

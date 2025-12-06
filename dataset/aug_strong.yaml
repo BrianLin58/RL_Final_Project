@@ -19,18 +19,19 @@ augmentations:
       scale_range: [0.1, 0.4]
     p: 1.0
 
-  - type: GaussNoise
-    params:
-      # strong noise amplitude
-      mean_range: [-0.2, 0.2]
-    p: 1.0
-
   - type: ImageCompression
     params:
       # heavy JPEG artifacts
       quality_range: [5, 30]
     p: 1.0
 
-settings:
-  seed: 42
-  keep_original_size: true
+noise:
+  - type: GaussNoise
+    params:
+      # strong noise amplitude
+      mean_range: [-0.2, 0.2]
+    p: 1.0
+
+# settings:
+#   seed: 42
+#   keep_original_size: true
