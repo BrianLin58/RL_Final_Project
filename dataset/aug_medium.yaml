@@ -1,32 +1,34 @@
 augmentations:
   - type: MotionBlur
     params:
+      # medium motion blur length
       blur_limit: [7, 15]
       allow_shifted: False
     p: 1.0
 
   - type: GaussianBlur
     params:
+      # wider kernel and sigma for stronger defocus
       blur_limit: [3, 7]
       sigma_limit: [0.7, 1.8]
     p: 1.0
 
   - type: Downscale
     params:
-      scale_min: 0.4
-      scale_max: 0.7
+      # 40% ~ 70% resolution: noticeable loss of detail
+      scale_range: [0.4, 0.7]
     p: 1.0
 
   - type: GaussNoise
     params:
-      var_limit: [20.0, 60.0]
-      mean: 0.0
+      # medium noise amplitude
+      mean_range: [-0.1, 0.1]
     p: 1.0
 
   - type: ImageCompression
     params:
-      quality_lower: 20
-      quality_upper: 50
+      # moderate to strong JPEG artifacts
+      quality_range: [20, 50]
     p: 1.0
 
 settings:

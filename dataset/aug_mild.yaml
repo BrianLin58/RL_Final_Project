@@ -1,32 +1,35 @@
 augmentations:
   - type: MotionBlur
     params:
+      # short motion streaks
       blur_limit: [3, 7]
       allow_shifted: False
     p: 1.0
 
   - type: GaussianBlur
     params:
+      # small Gaussian kernel and small sigma
       blur_limit: [3, 5]
       sigma_limit: [0.3, 1.0]
     p: 1.0
 
   - type: Downscale
     params:
-      scale_min: 0.7
-      scale_max: 0.9
+      # 70% ~ 90% of original resolution (mild pixelation)
+      scale_range: [0.7, 0.9]
     p: 1.0
 
   - type: GaussNoise
     params:
-      var_limit: [5.0, 20.0]
-      mean: 0.0
+      # small noise amplitude; your wrapper uses mean_range
+      # (symmetric range around 0 → mild noise)
+      mean_range: [-0.05, 0.05]
     p: 1.0
 
   - type: ImageCompression
     params:
-      quality_lower: 40
-      quality_upper: 70
+      # JPEG compression: mild to moderate
+      quality_range: [40, 70]
     p: 1.0
 
 settings:
