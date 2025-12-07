@@ -9,9 +9,10 @@ from gymnasium import Env, spaces
 from get_reward import evaluate_sequence_miou, evaluate_sequence_miou_from_frames
 from utils.parse_bbox_files import parse_bbox_from_files
 from encoder.placeholder_encoder import PlaceholderEncoder, ResNet18Encoder
+from calc_similarity import calc_miou_from_boxes
 
 class VideoEnv(Env):
-    def __init__(self, data_dir="data\\GOT10\\train", frame_size=60, stack=3):
+    def __init__(self, data_dir="data/GOT10/train", frame_size=60, stack=3):
         self.data_dir = data_dir      # path to data directory
         self.frame_size = frame_size  # height and width of each frame
         self.stack = stack            # sliding window size
@@ -45,6 +46,8 @@ class VideoEnv(Env):
         self.lq_dir = None             # path to low quality video
         self.lq_frame_paths = []       # list of paths to low quality jpg
         self.gt_boxes = []             # groundtruth bounding boxes
+        self.perturbed_boxes = []      # predicted bbox for perturbed frames
+        self.lq_boxes = []             # predicted bbox for original lq frames
         self.video_length = 0          # number of frames in the video
         self.sliding_window = []       # sliding window of frames, each (C, H, W) float32 [0,1]
         self.frame_index = 0           # next frame index to read
@@ -56,6 +59,9 @@ class VideoEnv(Env):
         # self.encoder = PlaceholderEncoder(out_size = self.frame_size)
         self.encoder = ResNet18Encoder()
 
+        self.tracker_perturbed = cv2.TrackerCSRT_create() # use a global tracker for perturbed frames
+        self.tracker_lq = cv2.TrackerCSRT_create() # use another global tracker for lq frames
+
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
@@ -66,7 +72,7 @@ class VideoEnv(Env):
         self.lq_frame_paths = [f for f in os.listdir(self.lq_dir) if f.endswith(".jpg")]
         self.lq_frame_paths = [os.path.join(self.lq_dir, f) for f in self.lq_frame_paths] # self.lq_frame_paths is a list of paths to low quality jpg
         self.gt_boxes, _ = parse_bbox_from_files(os.path.join(self.sample_dir, "groundtruth.txt"))
-        print(f"[DEBUG] Getting groundtruth bbox...")
+        # print(f"[DEBUG] Getting groundtruth bbox...")
 
         self.video_length = len(self.lq_frame_paths)
         if self.video_length < self.stack:
@@ -83,6 +89,9 @@ class VideoEnv(Env):
 
         self.all_perturbed_frames = [] # stores BGR, HWC data
 
+        self.lq_boxes = []
+        self.perturbed_boxes = []
+
         # read initial frames
         for idx in range(self.stack):
             self.image = self.all_lq_frames[self.frame_index]
@@ -90,6 +99,31 @@ class VideoEnv(Env):
             if idx < self.stack:
                 self.all_perturbed_frames.append(copy.deepcopy(self.image))
             self.sliding_window.append(self._preprocess(self.image, resize = False))
+
+        # initialize tracker
+        self.tracker_perturbed.init(self.all_perturbed_frames[0], self.gt_boxes[0])
+        self.perturbed_boxes.append(self.gt_boxes[0]) # pred_box[0] = gt_box[0]
+        print(f"[DEBUG] Tracking {self.sample_dir}'s initial {self.stack} frames...")
+        for idx in range(1, self.stack):
+            success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[idx]) # also append predicted boxes of initial frames
+            if success:
+                self.perturbed_boxes.append(bbox)
+            else:
+                self.perturbed_boxes.append(self.perturbed_boxes[-1])
+                print(f"[WARNING] Failed to track the {idx}th lq frame. Using previous value.")
+
+        # finish all lq boxes predict upon init
+        self.tracker_lq.init(self.all_lq_frames[0], self.gt_boxes[0])
+        self.lq_boxes.append(self.gt_boxes[0])
+        print(f"[DEBUG] Tracking ALL lq frames for {self.sample_dir}...")
+        for idx in range(1, self.video_length):
+            success, bbox = self.tracker_lq.update(self.all_lq_frames[idx])
+            if success:
+                self.lq_boxes.append(bbox)
+            else:
+                self.lq_boxes.append(self.lq_boxes[-1])
+                print(f"[WARNING] Failed to track The {idx}th lq frame. Using previous value.")
+        print(f"[DEBUG] Finished tracking all lq frames for {self.sample_dir}")
 
         return self._get_obs(), {}
 
@@ -132,9 +166,24 @@ class VideoEnv(Env):
         print(f"self.sample_dir = {self.sample_dir}")
         # miou_1 = evaluate_sequence_miou(self.tmp_dir.name, os.path.join(self.sample_dir, "groundtruth.txt"), index=self.frame_index)
         # miou_0 = evaluate_sequence_miou(self.lq_dir, os.path.join(self.sample_dir, "groundtruth.txt"), index=self.frame_index)
-        miou_after  = evaluate_sequence_miou_from_frames(self.all_perturbed_frames, self.gt_boxes, index = self.frame_index)
-        miou_before = evaluate_sequence_miou_from_frames(self.all_lq_frames, self.gt_boxes, index = self.frame_index)
+        # miou_after  = evaluate_sequence_miou_from_frames(self.all_perturbed_frames, self.gt_boxes, index = self.frame_index)
+        # miou_before = evaluate_sequence_miou_from_frames(self.all_lq_frames, self.gt_boxes, index = self.frame_index)
+        # reward = miou_after - miou_before
+
+        print(f"[DEBUG] Calculating reward for the {self.frame_index}th frame.") #3
+        # print(f"[DEBUG] Below shows the lq_boxes")
+        # print(self.lq_boxes)
+        miou_before = calc_miou_from_boxes(self.gt_boxes, self.lq_boxes, self.frame_index)
+
+        success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[-1]) # also append predicted boxes of initial frames
+        if success:
+            self.perturbed_boxes.append(bbox)
+        else:
+            self.perturbed_boxes.append(self.perturbed_boxes[-1])
+            print(f"[WARNING] Failed to track the {self.frame_index}th perturbed frame. Using previous value.")
+        miou_after = calc_miou_from_boxes(self.gt_boxes, self.perturbed_boxes, self.frame_index)
         reward = miou_after - miou_before
+        
         print(f"reward = {reward}")
         
         info = {

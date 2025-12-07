@@ -133,6 +133,7 @@ def train(eval_env, model, config, args):
         epoch_duration = time.time() - epoch_start_time
 
         # Evaluation
+        print("[DEBUG] Start evaluation...")
         eval_start = time.time()
         avg_reward = eval(eval_env, model, config["eval_episode_num"], args.visualize_index)
         eval_duration = time.time() - eval_start
