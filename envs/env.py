@@ -17,6 +17,7 @@ class VideoEnv(Env):
         self.val_dir = val_dir        # path to val data directory
         self.frame_size = frame_size  # height and width of each frame
         self.stack = stack            # sliding window size
+        self.vis_flag = False
 
         # continuous action: modify shape(x,) to indicate action dimension
         # self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
@@ -75,6 +76,15 @@ class VideoEnv(Env):
             video_list = [f for f in os.listdir(self.val_dir)]
             video_list.sort()
             self.sample_dir = os.path.join(self.val_dir, video_list[eval_id % len(video_list)])
+
+            self.vis_flag = options.get("vis_flag", False)
+            print(f"[DEBUG] self.vis_flag is {self.vis_flag}")
+            if self.vis_flag:
+                print(f"[DEBUG] Will visualize {video_list[eval_id % len(video_list)]}")
+                self.visualize_dir = f"visualization/{video_list[eval_id % len(video_list)]}/"
+                os.makedirs(os.path.join(self.visualize_dir, "lq"), exist_ok=True)
+                os.makedirs(os.path.join(self.visualize_dir, "perturbed"), exist_ok=True)
+
         self.lq_dir = os.path.join(self.sample_dir, "degraded")
         self.lq_frame_paths = [f for f in os.listdir(self.lq_dir) if f.endswith(".jpg")]
         self.lq_frame_paths = [os.path.join(self.lq_dir, f) for f in self.lq_frame_paths] # self.lq_frame_paths is a list of paths to low quality jpg
@@ -165,6 +175,12 @@ class VideoEnv(Env):
 
         self.all_perturbed_frames.append(self._postprocess(self.sliding_window[-1]))
         # TODO: write a flag to store frame here
+        if self.vis_flag:
+            cv2.imwrite(os.path.join(self.visualize_dir, 'perturbed', f"{(self.frame_index):08d}.jpg"), self.all_perturbed_frames[-1])
+            print(f"[DEBUG] Visualized perturbed frame {self.frame_index}")
+            cv2.imwrite(os.path.join(self.visualize_dir, 'lq', f"{(self.frame_index):08d}.jpg"), self.all_lq_frames[self.frame_index - 1])
+            print(f"[DEBUG] Visualized lq frame {self.frame_index}")
+            
 
         
         # TODO: calculate reward
@@ -359,18 +375,20 @@ class VideoEnv(Env):
         result = np.nan_to_num(result, nan=0.5, posinf=1.0, neginf=0.0)
         return np.clip(result, 0.0, 1.0)
 
-    def visualize(self, seed):
-        visualize_dir = f"visualization/{seed}/"
-        os.makedirs(os.path.join(visualize_dir, "lq"), exist_ok=True)
-        os.makedirs(os.path.join(visualize_dir, "perturbed"), exist_ok=True)
+    # WARNING: THE FUNCTION BELOW IS DEPRECATED
+    # def visualize(self, seed):
+    #     visualize_dir = f"visualization/{seed}/"
+    #     os.makedirs(os.path.join(visualize_dir, "lq"), exist_ok=True)
+    #     os.makedirs(os.path.join(visualize_dir, "perturbed"), exist_ok=True)
 
-        for frame_id, frame in enumerate(self.all_lq_frames):
-            visualize_path = os.path.join(visualize_dir, "lq", f"{(frame_id + 1):08d}.jpg")
-            cv2.imwrite(visualize_path, frame)
-        print(f"[INFO] Done visualization of lq frames index {seed} in directory {visualize_dir}")
+    #     for frame_id, frame in enumerate(self.all_lq_frames):
+    #         visualize_path = os.path.join(visualize_dir, "lq", f"{(frame_id + 1):08d}.jpg")
+    #         cv2.imwrite(visualize_path, frame)
+    #     print(f"[INFO] Done visualization of lq frames index {seed} in directory {visualize_dir}")
 
-        for frame_id, frame in enumerate(self.all_perturbed_frames):
-            visualize_path = os.path.join(visualize_dir, "perturbed", f"{(frame_id + 1):08d}.jpg")
-            cv2.imwrite(visualize_path, frame)
-        print(f"[INFO] Done visualization of perturbed frames {seed} in directory {visualize_dir}")
+    #     for frame_id, frame in enumerate(self.all_perturbed_frames):
+    #         visualize_path = os.path.join(visualize_dir, "perturbed", f"{(frame_id + 1):08d}.jpg")
+    #         cv2.imwrite(visualize_path, frame)
+    #         print(f"[DEBUG] Visualizing the {frame_id}th frame from directory: {visualize_dir}")
+    #     print(f"[INFO] Done visualization of perturbed frames {seed} in directory {visualize_dir}")
 

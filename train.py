@@ -67,13 +67,13 @@ my_config = {
     "run_id": "video_enhancement",
     "algorithm": PPO,  # PPO works well with discrete actions
     "policy_network": "MlpPolicy", # use MlpPolicy for non-image obs (encoder output)
-    "save_path": "models/test_00",
-    "num_train_envs": 4,
-    "epoch_num": 2,
-    "timesteps_per_epoch": 4096,
+    "save_path": "test_vis",#"models/test_00",
+    "num_train_envs": 1,#4,
+    "epoch_num": 1,#100,
+    "timesteps_per_epoch": 3,#4096,
     "eval_episode_num": 2,
     "batch_size": 4,
-    "n_steps": 2048
+    "n_steps": 2#2048
 }
 
 def make_env():
@@ -89,7 +89,11 @@ def eval(env, model, eval_episode_num, visualize_index):
         done = False
         # Set seed using old Gym API
         env.seed(seed)
-        env.set_options([{"eval_id": seed}])
+        print(f"[DEBUG] Seed {seed} is in visualize_index {visualize_index}? {seed in visualize_index}")
+        if seed in visualize_index:
+            env.set_options([{"eval_id": seed, "vis_flag": True}])
+        else:
+            env.set_options([{"eval_id": seed}])
         obs = env.reset()
         ep_reward = 0.0
 
@@ -104,9 +108,9 @@ def eval(env, model, eval_episode_num, visualize_index):
                 ep_reward += reward
 
         total_reward += ep_reward
-        if seed in visualize_index:
+        # if seed in visualize_index:
             # env.envs[0].env.visualize(seed)
-            env.env_method("visualize", seed)
+            # env.env_method("visualize", seed)
 
     return total_reward / eval_episode_num
 
@@ -152,6 +156,16 @@ def train(eval_env, model, config, args):
         print(f"Performance:")
         print(f"   - Avg Reward: {avg_reward:.4f}")
 
+        if args.wandb:
+            wandb.log(
+                {
+                 "epoch": epoch,
+                 "avg_reward": avg_reward,
+                #  "avg_highest": avg_highest,
+                #  "avg_score": avg_score
+                 }
+            )
+
         # Save the best model
         if avg_reward > best_reward:
             best_reward = avg_reward
@@ -170,6 +184,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--visualize_index", nargs = "+", type = int, default = [], help = "Visualize at the specified round of evaluation.")
+    parser.add_argument("--wandb", action="store_true")
     args = parser.parse_args()
 
     train_env = SubprocVecEnv([make_env for _ in range(my_config["num_train_envs"])])
@@ -215,4 +230,15 @@ if __name__ == "__main__":
             gae_lambda=0.95,
             clip_range=0.2,
         )
+    
+    if args.wandb:
+        import wandb
+        run = wandb.init(
+            project = "rl_final",
+            name = my_config["run_id"],
+            config = my_config,
+            sync_tensorboard=True,
+            id = my_config["run_id"]
+        )
+
     train(eval_env, model, my_config, args)
