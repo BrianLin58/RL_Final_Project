@@ -12,8 +12,9 @@ from encoder.placeholder_encoder import PlaceholderEncoder, ResNet18Encoder
 from calc_similarity import calc_miou_from_boxes
 
 class VideoEnv(Env):
-    def __init__(self, data_dir="data/GOT10/train", frame_size=60, stack=3):
-        self.data_dir = data_dir      # path to data directory
+    def __init__(self, data_dir="data/GOT10/train", val_dir = "data/GOT10/val", frame_size=60, stack=3):
+        self.data_dir = data_dir      # path to training data directory
+        self.val_dir = val_dir        # path to val data directory
         self.frame_size = frame_size  # height and width of each frame
         self.stack = stack            # sliding window size
 
@@ -66,8 +67,14 @@ class VideoEnv(Env):
         super().reset(seed=seed)
 
         # random select a video
-        video_list = [f for f in os.listdir(self.data_dir)]
-        self.sample_dir = os.path.join(self.data_dir, random.choice(video_list))
+        if options is None:
+            video_list = [f for f in os.listdir(self.data_dir)]
+            self.sample_dir = os.path.join(self.data_dir, random.choice(video_list))
+        elif options:
+            eval_id = options.get("eval_id", None)
+            video_list = [f for f in os.listdir(self.val_dir)]
+            video_list.sort()
+            self.sample_dir = os.path.join(self.val_dir, video_list[eval_id % len(video_list)])
         self.lq_dir = os.path.join(self.sample_dir, "degraded")
         self.lq_frame_paths = [f for f in os.listdir(self.lq_dir) if f.endswith(".jpg")]
         self.lq_frame_paths = [os.path.join(self.lq_dir, f) for f in self.lq_frame_paths] # self.lq_frame_paths is a list of paths to low quality jpg

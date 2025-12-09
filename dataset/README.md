@@ -8,10 +8,10 @@ Under project root:
 
 ### modes:
   1. single: degrades a single video
+
     - --input_root: the folder *directly* containing frames of the desired video to degrade
-
     - --output_root: the *parent* folder that wraps the folder containing the output pack
-
+    
     example:
     ```
     python dataset/degrade_video_albu.py --input_root ../dataset/GOT10/test/GOT-10k_Test_000001/ \

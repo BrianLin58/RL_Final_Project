@@ -67,13 +67,13 @@ my_config = {
     "run_id": "video_enhancement",
     "algorithm": PPO,  # PPO works well with discrete actions
     "policy_network": "MlpPolicy", # use MlpPolicy for non-image obs (encoder output)
-    "save_path": "models\\video_enhancement_model",
-    "num_train_envs": 1,
-    "epoch_num": 1,
-    "timesteps_per_epoch": 1,
-    "eval_episode_num": 1,
-    "batch_size": 2,
-    "n_steps": 2
+    "save_path": "models/test_00",
+    "num_train_envs": 4,
+    "epoch_num": 2,
+    "timesteps_per_epoch": 4096,
+    "eval_episode_num": 2,
+    "batch_size": 4,
+    "n_steps": 2048
 }
 
 def make_env():
@@ -89,6 +89,7 @@ def eval(env, model, eval_episode_num, visualize_index):
         done = False
         # Set seed using old Gym API
         env.seed(seed)
+        env.set_options([{"eval_id": seed}])
         obs = env.reset()
         ep_reward = 0.0
 
