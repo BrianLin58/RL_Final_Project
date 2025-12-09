@@ -1,6 +1,7 @@
 import time
 import warnings
 import argparse
+import yaml
 import gymnasium as gym
 from gymnasium.envs.registration import register
 
@@ -13,6 +14,7 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 import torch
 import torch.nn as nn
 import numpy as np
+from envs.env import VideoEnv
 
 class Map3DCNN(BaseFeaturesExtractor):
     """
@@ -45,10 +47,10 @@ class Map3DCNN(BaseFeaturesExtractor):
         return self.linear(self.cnn(observations.unsqueeze(1)))
 
 warnings.filterwarnings("ignore")
-register(
-    id='VideoEnv-v0',
-    entry_point='envs:VideoEnv'
-)
+# register(
+#     id='VideoEnv-v0',
+#     entry_point='envs:VideoEnv'
+# )
 
 # Set hyper params (configurations) for training
 # my_config = {
@@ -63,23 +65,32 @@ register(
 #     "eval_episode_num": 10
 # }
 
-my_config = {
-    "run_id": "video_enhancement",
-    "algorithm": PPO,  # PPO works well with discrete actions
-    "policy_network": "MlpPolicy", # use MlpPolicy for non-image obs (encoder output)
-    "save_path": "test_vis",#"models/test_00",
-    "num_train_envs": 1,#4,
-    "epoch_num": 1,#100,
-    "timesteps_per_epoch": 3,#4096,
-    "eval_episode_num": 2,
-    "batch_size": 4,
-    "n_steps": 2#2048
-}
+# my_config = {
+#     "run_id": "video_enhancement",
+#     "algorithm": PPO,  # PPO works well with discrete actions
+#     "policy_network": "MlpPolicy", # use MlpPolicy for non-image obs (encoder output)
+#     "save_path": "test_vis",#"models/test_00",
+#     "num_train_envs": 1,#4,
+#     "epoch_num": 1,#100,
+#     "timesteps_per_epoch": 3,#4096,
+#     "eval_episode_num": 2,
+#     "batch_size": 4,
+#     "n_steps": 2#2048
+# }
 
-def make_env():
-    env = gym.make('VideoEnv-v0')
-    env = Monitor(env)
-    return env
+# def make_env():
+#     env = gym.make('VideoEnv-v0')
+#     env = Monitor(env)
+#     return env
+
+def make_env(cfg):
+    def _init():
+        return VideoEnv(
+            data_dir=cfg["train"]["data_root"],
+            val_dir=cfg["valid"]["data_root"],
+            stack=cfg["train"]["stack"],
+        )
+    return _init
 
 def eval(env, model, eval_episode_num, visualize_index):
     """Evaluate the model and return avg_reward"""
@@ -114,9 +125,9 @@ def eval(env, model, eval_episode_num, visualize_index):
 
     return total_reward / eval_episode_num
 
-def train(eval_env, model, config, args):
+def train(eval_env, model, cfg):
     """Train agent using SB3 algorithm and my_config"""
-    
+    config = cfg["train"]
     print(f"\n{'='*60}")
     print(f"Training Start")
     print(f"{'='*60}")
@@ -140,7 +151,7 @@ def train(eval_env, model, config, args):
         # Evaluation
         print("[DEBUG] Start evaluation...")
         eval_start = time.time()
-        avg_reward = eval(eval_env, model, config["eval_episode_num"], args.visualize_index)
+        avg_reward = eval(eval_env, model, config["eval_episode_num"], cfg["visualize"]["index"])
         eval_duration = time.time() - eval_start
 
         total_duration = time.time() - start_time
@@ -156,7 +167,7 @@ def train(eval_env, model, config, args):
         print(f"Performance:")
         print(f"   - Avg Reward: {avg_reward:.4f}")
 
-        if args.wandb:
+        if cfg["wandb"]["enabled"]:
             wandb.log(
                 {
                  "epoch": epoch,
@@ -170,7 +181,7 @@ def train(eval_env, model, config, args):
         if avg_reward > best_reward:
             best_reward = avg_reward
             print("Saving best model...")
-            model.save(f"{config['save_path']}/{config['algorithm'].__name__}")
+            model.save(f"{config['save_path']}/{config['algorithm']}")
 
         print("-" * 60)
 
@@ -183,18 +194,19 @@ def train(eval_env, model, config, args):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--visualize_index", nargs = "+", type = int, default = [], help = "Visualize at the specified round of evaluation.")
-    parser.add_argument("--wandb", action="store_true")
+    parser.add_argument("--config_path", type = str, default = "config/default.yaml")
     args = parser.parse_args()
+    with open(args.config_path, 'r') as f:
+        cfg = yaml.safe_load(f)
 
-    train_env = SubprocVecEnv([make_env for _ in range(my_config["num_train_envs"])])
+    train_env = SubprocVecEnv([make_env(cfg) for _ in range(cfg["train"]["num_train_envs"])])#my_config["num_train_envs"])])
 
-    eval_env = DummyVecEnv([make_env])
+    eval_env = DummyVecEnv([make_env(cfg)])
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # print(f"Using device: {device}")
 
-    if my_config["policy_network"] == "CnnPolicy":
+    if cfg["train"]["policy_network"] == "CnnPolicy":
         policy_kwargs = dict(
             features_extractor_class=Map3DCNN,
             net_arch=[256, 256]
@@ -215,30 +227,33 @@ if __name__ == "__main__":
     #     buffer_size=my_config["buffer_size"],
     #     policy_kwargs=policy_kwargs
     # )
-    model = my_config["algorithm"](
-            my_config["policy_network"], 
+    ALGOS = {
+        "PPO": PPO
+    }
+    model = ALGOS[cfg["train"]["algorithm"]](
+            cfg["train"]["policy_network"], 
             train_env, 
             verbose=1,
             device=device,
-            tensorboard_log=my_config["run_id"],
+            tensorboard_log=cfg["tensorboard"]["run_id"],
             policy_kwargs=policy_kwargs,
             learning_rate=3e-4,
-            n_steps=my_config["n_steps"],
-            batch_size=my_config["batch_size"],
+            n_steps=cfg["train"]["n_steps"],
+            batch_size=cfg["train"]["batch_size"],
             n_epochs=10,
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.2,
         )
     
-    if args.wandb:
+    if cfg["wandb"]["enabled"]:
         import wandb
         run = wandb.init(
-            project = "rl_final",
-            name = my_config["run_id"],
-            config = my_config,
-            sync_tensorboard=True,
-            id = my_config["run_id"]
+            project = cfg["wandb"]["project"],
+            name = cfg["wandb"]["run_id"],
+            config = cfg["train"],
+            sync_tensorboard=cfg["wandb"]["sync_tensorboard"],
+            id = cfg["wandb"]["run_id"]
         )
 
-    train(eval_env, model, my_config, args)
+    train(eval_env, model, cfg)

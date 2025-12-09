@@ -1,0 +1,26 @@
+tensorboard:
+  run_id: "video_enhancement"
+wandb:
+  enabled: true
+  run_id: "video_enhancement"
+  project: "rl_final"
+  sync_tensorboard: true
+
+train:
+  algorithm: "PPO"
+  policy_network: "MlpPolicy"
+  save_path: "test_vis"
+  num_train_envs: 1
+  epoch_num: 1
+  timesteps_per_epoch: 3
+  eval_episode_num: 2
+  batch_size: 4
+  n_steps: 2
+  data_root: "data/GOT10/train"
+  stack: 3
+
+valid:
+  data_root: "data/GOT10/val"
+
+visualize:
+  index: [0]
