@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # choose: mild / medium / strong
-level="strong"
+level="medium"
 
 python inspect_degradations.py \
   --image ../data/GOT10/train/GOT-10k_Train_000001/original/00000001.jpg \
