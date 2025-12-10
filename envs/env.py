@@ -12,12 +12,16 @@ from encoder.placeholder_encoder import PlaceholderEncoder, ResNet18Encoder
 from calc_similarity import calc_miou_from_boxes
 
 class VideoEnv(Env):
-    def __init__(self, data_dir="data/GOT10/train", val_dir = "data/GOT10/val", frame_size=60, stack=3):
+    def __init__(self, data_dir="data/GOT10/train", val_dir = "data/GOT10/val", frame_size=60, stack=3, action_repeat=5):
         self.data_dir = data_dir      # path to training data directory
         self.val_dir = val_dir        # path to val data directory
         self.frame_size = frame_size  # height and width of each frame
         self.stack = stack            # sliding window size
+        self.action_repeat = action_repeat  # number of frames to repeat each action
         self.vis_flag = False
+        
+        self.current_action = None
+        self.action_counter = 0
 
         # continuous action: modify shape(x,) to indicate action dimension
         # self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
@@ -58,6 +62,7 @@ class VideoEnv(Env):
         self.all_lq_frames = []        # stores BGR, HWC data
         self.all_perturbed_frames = [] # stores BGR, HWC data
 
+        
         # self.encoder = PlaceholderEncoder(out_size = self.frame_size)
         self.encoder = ResNet18Encoder()
 
@@ -163,8 +168,13 @@ class VideoEnv(Env):
         truncate = False
         info = {}
         
+        if self.current_action is None or self.action_counter >= self.action_repeat:
+            self.current_action = action
+            self.action_counter = 0
+        self.action_counter += 1
+        
         # Apply enhancements to current frame based on action
-        self.sliding_window[-1] = self._apply_enhancements(self.sliding_window[-1], action) # RGB, CHW
+        self.sliding_window[-1] = self._apply_enhancements(self.sliding_window[-1], self.current_action) # RGB, CHW
 
         # Save enhanced frame to temporary directory
         # path = os.path.join(self.tmp_dir.name, f"{self.frame_index:08d}.jpg")
@@ -192,26 +202,38 @@ class VideoEnv(Env):
         # miou_after  = evaluate_sequence_miou_from_frames(self.all_perturbed_frames, self.gt_boxes, index = self.frame_index)
         # miou_before = evaluate_sequence_miou_from_frames(self.all_lq_frames, self.gt_boxes, index = self.frame_index)
         # reward = miou_after - miou_before
-
-        print(f"[DEBUG] Calculating reward for the {self.frame_index}th frame.") #3
+        
+        if self.action_counter >= self.action_repeat or self.frame_index >= self.video_length-1:
+            print(f"[DEBUG] Calculating reward for the {self.frame_index}th frame (action_counter: {self.action_counter}).") #3
         # print(f"[DEBUG] Below shows the lq_boxes")
         # print(self.lq_boxes)
-        miou_before = calc_miou_from_boxes(self.gt_boxes, self.lq_boxes, self.frame_index)
+            miou_before = calc_miou_from_boxes(self.gt_boxes, self.lq_boxes, self.frame_index)
 
-        success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[-1]) # also append predicted boxes of initial frames
-        if success:
-            self.perturbed_boxes.append(bbox)
-        else:
-            self.perturbed_boxes.append(self.perturbed_boxes[-1])
-            print(f"[WARNING] Failed to track the {self.frame_index}th perturbed frame. Using previous value.")
-        miou_after = calc_miou_from_boxes(self.gt_boxes, self.perturbed_boxes, self.frame_index)
-        reward = miou_after - miou_before
+            success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[-1]) # also append predicted boxes of initial frames
+            if success:
+                self.perturbed_boxes.append(bbox)
+            else:
+                self.perturbed_boxes.append(self.perturbed_boxes[-1])
+                print(f"[WARNING] Failed to track the {self.frame_index}th perturbed frame. Using previous value.")
+            miou_after = calc_miou_from_boxes(self.gt_boxes, self.perturbed_boxes, self.frame_index)
+            reward = miou_after - miou_before
         
-        print(f"reward = {reward}")
+            print(f"reward = {reward}")
+        else:
+            success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[-1])
+            if success:
+                self.perturbed_boxes.append(bbox)
+            else:
+                self.perturbed_boxes.append(self.perturbed_boxes[-1])
+                print(f"[WARNING] Failed to track the {self.frame_index}th perturbed frame. Using previous value.")
+            reward = 0.0
+            # print(f"[DEBUG] Intermediate frame {self.frame_index}, reward = 0.0 (will accumulate at end of cycle)")
         
         info = {
             'action': action,
-            'frame_index': self.frame_index
+            'frame_index': self.frame_index,
+            'action_counter': self.action_counter,
+            'is_reward_frame': self.action_counter >= self.action_repeat
         }
         
         # read next frame

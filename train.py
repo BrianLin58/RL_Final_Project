@@ -89,6 +89,7 @@ def make_env(cfg):
             data_dir=cfg["train"]["data_root"],
             val_dir=cfg["valid"]["data_root"],
             stack=cfg["train"]["stack"],
+            action_repeat=cfg["train"]["action_repeat"]
         )
     return _init
 
