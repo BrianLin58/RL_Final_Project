@@ -27,14 +27,16 @@ def run_opencv_tracker_on_frames(frames, init_bbox):
     pred_boxes = [tuple(init_bbox)]
 
     # Track forward
-    for frame in frames[1:]:
+    for idx, frame in enumerate(frames[1:]):
         success, bbox = tracker.update(frame)
         if success:
             x, y, w, h = map(float, bbox)
             pred_boxes.append((x, y, w, h))
         else:
             # failed: append zero-box or copy previous box
-            pred_boxes.append((0, 0, 0, 0))
+            print(f"[WARNING] Failed to track {idx}th frame.")
+            # pred_boxes.append((0, 0, 0, 0))
+            pred_boxes.append(pred_boxes[-1])
 
     return pred_boxes
 
@@ -110,12 +112,12 @@ if __name__ == "__main__":
     import glob
 
     # Example: load frames manually just for test
-    frame_paths = sorted(glob.glob("data/GOT10/train/GOT-10k_Train_000001/original/*.jpg"))
+    frame_paths = sorted(glob.glob("data/GOT10/train/GOT-10k_Train_004921/original/*.jpg"))
     frames = [cv2.imread(p) for p in frame_paths]
 
     # Example ground truth
     gt_boxes = []
-    with open("data/GOT10/train/GOT-10k_Train_000001/groundtruth.txt", 'r') as f:
+    with open("data/GOT10/train/GOT-10k_Train_004921/groundtruth.txt", 'r') as f:
         for line in f:
             line = line.strip()
             if not line:

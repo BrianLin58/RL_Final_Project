@@ -47,7 +47,10 @@ def load_frames_as_video(folder):
         img = cv2.imread(os.path.join(folder, f))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         frames.append(img)
-    return np.stack(frames), frame_files
+    try:
+        return np.stack(frames), frame_files
+    except:
+        return None, None
 
 
 def save_frames(video_array, filenames, out_folder):
@@ -149,6 +152,9 @@ def degrade_single_sequence(seq_folder, input_root, output_root, cfg, make_vid =
     mkdir(out_seq_root)
 
     video, frame_files = load_frames_as_video(seq_folder)
+    if video is None:
+        print(f"[WARNING] Cannot process {seq_folder} (load error)")
+        return
     transform = build_transform_from_config(cfg)
     # transform = build_video_transform()
     augmented = transform(images=video)

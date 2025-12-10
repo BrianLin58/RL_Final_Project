@@ -12,3 +12,4 @@ TransformerTrack/*
 /frame.*
 visualization/*
 wandb/**
+/data/*
