@@ -1,0 +1,28 @@
+tensorboard:
+  run_id: "medium_1"
+wandb:
+  enabled: true
+  run_id: "medium_1"
+  project: "rl_final"
+  sync_tensorboard: true
+
+train:
+  algorithm: "PPO"
+  policy_network: "MlpPolicy"
+  save_path: "model/medium_1"
+  num_train_envs: 4
+  epoch_num: 100
+  timesteps_per_epoch: 1024
+  eval_episode_num: 5
+  batch_size: 64
+  n_steps: 512
+  data_root: "data/GOT10_2/train"
+  stack: 3
+  action_repeat: 32
+  encoder: "ResNet18"
+
+valid:
+  data_root: "data/GOT10_2/val"
+
+visualize:
+  index: [1]

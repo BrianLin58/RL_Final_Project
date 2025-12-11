@@ -225,6 +225,7 @@ if __name__ == "__main__":
                             'multiple' for a folder containing multiple videos, your input_root should be a dirctory containing directories of frames; \
                             'txt' mode requires a txt file as argument indicating the relative paths of desired directories to the input_root, the input_root should be a directory containing multiple folders of frames.")
     parser.add_argument("--txt", type = str, default = None)
+    parser.add_argument("--record", action = "store_true")
     args = parser.parse_args()
 
     input_root = args.input_root

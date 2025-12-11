@@ -12,7 +12,7 @@ from encoder.placeholder_encoder import PlaceholderEncoder, ResNet18Encoder
 from calc_similarity import calc_miou_from_boxes
 
 class VideoEnv(Env):
-    def __init__(self, data_dir="data/GOT10/train", val_dir = "data/GOT10/val", frame_size=60, stack=3, action_repeat=5):
+    def __init__(self, data_dir="data/GOT10/train", val_dir = "data/GOT10/val", frame_size=60, stack=3, action_repeat=5, encoder = None):
         self.data_dir = data_dir      # path to training data directory
         self.val_dir = val_dir        # path to val data directory
         self.frame_size = frame_size  # height and width of each frame
@@ -63,8 +63,12 @@ class VideoEnv(Env):
         self.all_perturbed_frames = [] # stores BGR, HWC data
 
         
-        # self.encoder = PlaceholderEncoder(out_size = self.frame_size)
-        self.encoder = ResNet18Encoder()
+        if encoder == "ResNet18":
+            self.encoder = ResNet18Encoder()
+        elif encoder == "DBCNN":
+            self.encoder = DBCNNEncoder()
+        else:
+            self.encoder = PlaceholderEncoder()
 
         self.tracker_perturbed = cv2.TrackerCSRT_create() # use a global tracker for perturbed frames
         self.tracker_lq = cv2.TrackerCSRT_create() # use another global tracker for lq frames
@@ -153,18 +157,6 @@ class VideoEnv(Env):
 
         return self._get_obs(), {}
 
-        # read initial frames
-        # for idx in range(self.stack):
-        #     self.image = cv2.imread(self.lq_frame_paths[self.frame_index])
-        #     self.frame_index += 1
-        #     # Save original frame to temporary directory
-        #     if self.frame_index < self.stack:
-        #         path = os.path.join(self.tmp_dir.name, f"{self.frame_index:08d}.jpg")
-        #         cv2.imwrite(path, self.image)
-        #     preprocessed_image = self._preprocess(self.image, resize=True)
-        #     self.sliding_window.append(copy.deepcopy(preprocessed_image))
-
-        # return self._get_obs(), {}
 
     def step(self, action):
         # reward = 1.0  # testing
@@ -178,17 +170,12 @@ class VideoEnv(Env):
         self.action_counter += 1
         
         # Apply enhancements to current frame based on action
+        # TODO: apply on 32 frames, use concatanated tensor
         self.sliding_window[-1] = self._apply_enhancements(self.sliding_window[-1], self.current_action) # RGB, CHW
 
-        # Save enhanced frame to temporary directory
-        # path = os.path.join(self.tmp_dir.name, f"{self.frame_index:08d}.jpg")
-        # enhanced_frame = self._preprocess(self.image, resize=False)
-        # enhanced_frame = self._apply_enhancements(enhanced_frame, action) # enhanced_frame is now in shape (C, H, W)
-        # enhanced_frame = self._postprocess(enhanced_frame) # enhanced_frame is now BGR, shape (H, W, C)
-        # cv2.imwrite(path, enhanced_frame) # TODO: write a flag to do this
-
         self.all_perturbed_frames.append(self._postprocess(self.sliding_window[-1]))
-        # TODO: write a flag to store frame here
+
+        # TODO: visualize 32 frames at once
         if self.vis_flag:
             cv2.imwrite(os.path.join(self.visualize_dir, 'perturbed', f"{(self.frame_index):08d}.jpg"), self.all_perturbed_frames[-1])
             print(f"[DEBUG] Visualized perturbed frame {self.frame_index}")
@@ -196,21 +183,11 @@ class VideoEnv(Env):
             print(f"[DEBUG] Visualized lq frame {self.frame_index}")
             
 
-        
-        # TODO: calculate reward
-        # tmp_parent = os.path.dirname(self.tmp_dir.name)
-        # lq_parent = os.path.dirname(self.lq_dir)
         print(f"[DEBUG] One step applied on self.sample_dir = {self.sample_dir}")
-        # miou_1 = evaluate_sequence_miou(self.tmp_dir.name, os.path.join(self.sample_dir, "groundtruth.txt"), index=self.frame_index)
-        # miou_0 = evaluate_sequence_miou(self.lq_dir, os.path.join(self.sample_dir, "groundtruth.txt"), index=self.frame_index)
-        # miou_after  = evaluate_sequence_miou_from_frames(self.all_perturbed_frames, self.gt_boxes, index = self.frame_index)
-        # miou_before = evaluate_sequence_miou_from_frames(self.all_lq_frames, self.gt_boxes, index = self.frame_index)
-        # reward = miou_after - miou_before
         
-        if self.action_counter >= self.action_repeat or self.frame_index >= self.video_length-1:
+        if self.frame_index >= self.video_length - 1:
             print(f"[DEBUG] Calculating reward for the {self.frame_index}th frame (action_counter: {self.action_counter}).") #3
-        # print(f"[DEBUG] Below shows the lq_boxes")
-        # print(self.lq_boxes)
+ 
             miou_before = calc_miou_from_boxes(self.gt_boxes, self.lq_boxes, self.frame_index)
 
             success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[-1]) # also append predicted boxes of initial frames
@@ -231,7 +208,6 @@ class VideoEnv(Env):
                 self.perturbed_boxes.append(self.perturbed_boxes[-1])
                 print(f"[WARNING] Failed to track the {self.frame_index}th perturbed frame. Using previous value.")
             reward = 0.0
-            # print(f"[DEBUG] Intermediate frame {self.frame_index}, reward = 0.0 (will accumulate at end of cycle)")
         
         info = {
             'action': action,
@@ -244,12 +220,8 @@ class VideoEnv(Env):
         if self.frame_index >= self.video_length:
             # self.close()
             done = True # end of video
-        # else:
-        #     self.sliding_window.pop(0)  
-        #     self.image = cv2.imread(self.lq_frame_paths[self.frame_index])
-        #     self.frame_index += 1
-        #     preprocessed_image = self._preprocess(self.image, resize=True)
-        #     self.sliding_window.append(copy.deepcopy(preprocessed_image))
+
+        # TODO: jump 32 frames
         else:
             self.sliding_window.pop(0)
             self.image = self.all_lq_frames[self.frame_index]
@@ -281,6 +253,7 @@ class VideoEnv(Env):
         return obs.astype(np.float32)
     
     def _apply_enhancements(self, frame, action):
+        # TODO: Handle multiple frames  GOOD LUCK BRIAN :) 
         """
         Apply enhancement operations based on discrete action values
         frame: (C, H, W) in range [0, 1]
@@ -322,31 +295,6 @@ class VideoEnv(Env):
         frame = np.transpose(frame, (2, 0, 1))
         
         return frame.astype(np.float32)
-
-    # def _calculate_reward(self, enhanced_frame, original_frame):
-    #     """
-    #     Calculate reward based on improvement in tracking performance
-        
-    #     TODO: Implement this based on your single object tracking metric
-    #     For now, returns a dummy reward
-        
-    #     You might want to:
-    #     1. Run tracking on both enhanced and original frames
-    #     2. Compare tracking confidence/accuracy
-    #     3. Return the improvement as reward
-    #     """
-    #     # Placeholder reward calculation
-    #     # You should replace this with actual tracking performance comparison
-        
-    #     # Example: negative of mean squared error (higher is better)
-    #     # This is just a placeholder - replace with actual tracking metric
-    #     reward = -np.mean((enhanced_frame - original_frame) ** 2)
-        
-    #     return float(reward)
-    
-    # def close(self):
-    #     if self.tmp_dir is not None:
-    #         self.tmp_dir.cleanup()
     
     def _apply_clahe(self, frame):
         """Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)"""

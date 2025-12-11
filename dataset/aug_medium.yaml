@@ -4,32 +4,32 @@ augmentations:
       # medium motion blur length
       blur_limit: [7, 15]
       allow_shifted: False
-    p: 1.0
+    p: 0.5
 
   - type: GaussianBlur
     params:
       # wider kernel and sigma for stronger defocus
       blur_limit: [3, 7]
       sigma_limit: [0.7, 1.8]
-    p: 1.0
+    p: 0.5
 
   - type: Downscale
     params:
       # 40% ~ 70% resolution: noticeable loss of detail
       scale_range: [0.4, 0.7]
-    p: 1.0
+    p: 0.5
 
   - type: ImageCompression
     params:
       # moderate to strong JPEG artifacts
       quality_range: [20, 50]
-    p: 1.0
+    p: 0.5
     
   - type: GaussNoise
     params:
       # medium noise amplitude
       mean_range: [-0.1, 0.1]
-    p: 1.0
+    p: 0.5
 
 settings:
   seed: 42

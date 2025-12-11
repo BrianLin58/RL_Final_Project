@@ -16,7 +16,7 @@ augmentations:
   - type: Downscale
     params:
       # 10% ~ 40% resolution: heavy pixelation
-      scale_range: [0.1, 0.4]
+      scale_range: [0.7, 0.9]
     p: 1.0
 
   - type: ImageCompression

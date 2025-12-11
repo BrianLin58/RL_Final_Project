@@ -24,4 +24,4 @@ valid:
   data_root: "data/GOT10/val"
 
 visualize:
-  index: [0]
+  index: [1]

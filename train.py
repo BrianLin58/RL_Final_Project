@@ -86,10 +86,11 @@ warnings.filterwarnings("ignore")
 def make_env(cfg):
     def _init():
         return VideoEnv(
-            data_dir=cfg["train"]["data_root"],
-            val_dir=cfg["valid"]["data_root"],
-            stack=cfg["train"]["stack"],
-            action_repeat=cfg["train"]["action_repeat"]
+            data_dir = cfg["train"]["data_root"],
+            val_dir = cfg["valid"]["data_root"],
+            stack = cfg["train"]["stack"],
+            action_repeat = cfg["train"]["action_repeat"],
+            encoder = cfg["train"]["encoder"]
         )
     return _init
 
@@ -143,8 +144,8 @@ def train(eval_env, model, cfg):
         epoch_start_time = time.time()
 
         model.learn(
-            total_timesteps=config["timesteps_per_epoch"],
-            reset_num_timesteps=False,
+            total_timesteps = config["timesteps_per_epoch"],
+            reset_num_timesteps = False,
         )
 
         epoch_duration = time.time() - epoch_start_time
@@ -200,6 +201,7 @@ if __name__ == "__main__":
     with open(args.config_path, 'r') as f:
         cfg = yaml.safe_load(f)
 
+    # TODO: normalize reward
     train_env = SubprocVecEnv([make_env(cfg) for _ in range(cfg["train"]["num_train_envs"])])#my_config["num_train_envs"])])
 
     eval_env = DummyVecEnv([make_env(cfg)])
