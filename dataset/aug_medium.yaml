@@ -25,6 +25,7 @@ augmentations:
       quality_range: [20, 50]
     p: 0.5
     
+noise:
   - type: GaussNoise
     params:
       # medium noise amplitude
@@ -34,3 +35,4 @@ augmentations:
 settings:
   seed: 42
   keep_original_size: true
+  record_params: true

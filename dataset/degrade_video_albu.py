@@ -8,6 +8,7 @@ import argparse
 import shutil
 import yaml
 import copy
+import json
 
 # ===========================
 # Helper Functions
@@ -35,6 +36,40 @@ def relpath_inside(root, path):
 
 def mkdir(path):
     os.makedirs(path, exist_ok=True)
+
+
+def to_jsonable(obj, visited=None):
+    if visited is None:
+        visited = set()
+
+    obj_id = id(obj)
+    if obj_id in visited:
+        return "<recursion>"
+    visited.add(obj_id)
+
+    # --- numpy types ---
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, (np.generic,)):
+        return obj.item()
+
+    # --- basic python types ---
+    if isinstance(obj, (str, int, float, bool)) or obj is None:
+        return obj
+    if isinstance(obj, (list, tuple)):
+        return [to_jsonable(x, visited) for x in obj]
+    if isinstance(obj, dict):
+        return {k: to_jsonable(v, visited) for k, v in obj.items()}
+
+    # --- custom objects: convert via __dict__ ---
+    if hasattr(obj, "__dict__"):
+        return {
+            "__class__": obj.__class__.__name__,
+            **{k: to_jsonable(v, visited) for k, v in obj.__dict__.items()}
+        }
+
+    # --- fallback string ---
+    return str(obj)
 
 
 def load_frames_as_video(folder):
@@ -115,7 +150,7 @@ def build_transform_from_config(cfg):
         p = aug.get("p", 1.0)
         aug_list.append(aug_type(p=p, **params))
 
-    return A.Compose(aug_list)
+    return A.Compose(aug_list, save_applied_params=cfg["settings"]["record_params"])
 
 '''
 # below is deprecated
@@ -160,6 +195,7 @@ def degrade_single_sequence(seq_folder, input_root, output_root, cfg, make_vid =
     augmented = transform(images=video)
     degraded = augmented["images"]
 
+    gn_mean, gn_std = None, None
     # apply noise
     if "noise" in cfg:
         noise_cfg = cfg["noise"]
@@ -199,6 +235,21 @@ def degrade_single_sequence(seq_folder, input_root, output_root, cfg, make_vid =
     save_frames(video, frame_files, original_dir)
     save_frames(degraded, frame_files, degraded_dir)
 
+    # log applied params as required
+    if cfg["settings"]["record_params"]:
+        json_path = os.path.join(out_seq_root, "degrade_info.json")
+        print(f"[DEBUG] Saving applied params for video {relative}")
+        log_data = {
+            "video_name": relative,
+            "transform": augmented["applied_transforms"],
+            "noise": {
+                "mean": gn_mean,
+                "std": gn_std
+            }
+        }
+        with open(json_path, 'w') as f:
+            json.dump(to_jsonable(log_data), f, indent=4)
+
     # Copy metadata
     copy_metadata_only(seq_folder, out_seq_root)
 
@@ -225,7 +276,6 @@ if __name__ == "__main__":
                             'multiple' for a folder containing multiple videos, your input_root should be a dirctory containing directories of frames; \
                             'txt' mode requires a txt file as argument indicating the relative paths of desired directories to the input_root, the input_root should be a directory containing multiple folders of frames.")
     parser.add_argument("--txt", type = str, default = None)
-    parser.add_argument("--record", action = "store_true")
     args = parser.parse_args()
 
     input_root = args.input_root
