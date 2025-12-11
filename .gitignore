@@ -13,3 +13,5 @@ TransformerTrack/*
 visualization/*
 wandb/**
 /data/*
+
+test_vis/**
