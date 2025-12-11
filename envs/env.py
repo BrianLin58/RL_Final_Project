@@ -75,7 +75,10 @@ class VideoEnv(Env):
         # random select a video
         if options is None:
             video_list = [f for f in os.listdir(self.data_dir)]
-            self.sample_dir = os.path.join(self.data_dir, random.choice(video_list))
+            while True:
+                self.sample_dir = os.path.join(self.data_dir, random.choice(video_list))
+                if os.path.isfile(os.path.join(self.sample_dir, "groundtruth.txt")):
+                    break
         elif options:
             eval_id = options.get("eval_id", None)
             video_list = [f for f in os.listdir(self.val_dir)]
@@ -140,6 +143,7 @@ class VideoEnv(Env):
         print(f"[DEBUG] Tracking ALL lq frames for {self.sample_dir}...")
         for idx in range(1, self.video_length):
             success, bbox = self.tracker_lq.update(self.all_lq_frames[idx])
+            print(f"[DEBUG] Tracking {idx}th frame...")
             if success:
                 self.lq_boxes.append(bbox)
             else:
@@ -196,7 +200,7 @@ class VideoEnv(Env):
         # TODO: calculate reward
         # tmp_parent = os.path.dirname(self.tmp_dir.name)
         # lq_parent = os.path.dirname(self.lq_dir)
-        print(f"self.sample_dir = {self.sample_dir}")
+        print(f"[DEBUG] One step applied on self.sample_dir = {self.sample_dir}")
         # miou_1 = evaluate_sequence_miou(self.tmp_dir.name, os.path.join(self.sample_dir, "groundtruth.txt"), index=self.frame_index)
         # miou_0 = evaluate_sequence_miou(self.lq_dir, os.path.join(self.sample_dir, "groundtruth.txt"), index=self.frame_index)
         # miou_after  = evaluate_sequence_miou_from_frames(self.all_perturbed_frames, self.gt_boxes, index = self.frame_index)
