@@ -9,6 +9,7 @@ from gymnasium import Env, spaces
 from get_reward import evaluate_sequence_miou, evaluate_sequence_miou_from_frames
 from utils.parse_bbox_files import parse_bbox_from_files
 from encoder.placeholder_encoder import PlaceholderEncoder, ResNet18Encoder
+from encoder.dbcnn_feature_wrapper import DBCNNEncoder
 from calc_similarity import calc_miou_from_boxes
 
 class VideoEnv(Env):
@@ -38,15 +39,7 @@ class VideoEnv(Env):
         self.sharpen_values = [0, 0.5, 1.0]
         self.gamma_values = [0.8, 1.0, 1.2]
 
-        # observation: (stacked channels, height, width)
-        self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf,
-            shape=(self.stack, 512),
-            # low=0.0, high=1.0,
-            # shape=(self.stack * 3, self.frame_size, self.frame_size), # stack RGB 3 channels
-            # shape = (self.stack * 3, 1080, 1920), # impossible :)
-            dtype=np.float32
-        )
+        
 
         self.sample_dir = None         # path to current video sample
         self.lq_dir = None             # path to low quality video
@@ -65,10 +58,23 @@ class VideoEnv(Env):
         
         if encoder == "ResNet18":
             self.encoder = ResNet18Encoder()
+            self.feature_dim = 512
         elif encoder == "DBCNN":
-            self.encoder = DBCNNEncoder()
+            self.encoder =  DBCNNEncoder(use_x1=False, use_x2=True)
+            self.feature_dim = 128
         else:
             self.encoder = PlaceholderEncoder()
+            self.feature_dim = 512
+            
+        # observation: (stacked channels, height, width)
+        self.observation_space = spaces.Box(
+            low=-np.inf, high=np.inf,
+            shape=(self.stack, self.feature_dim),
+            # low=0.0, high=1.0,
+            # shape=(self.stack * 3, self.frame_size, self.frame_size), # stack RGB 3 channels
+            # shape = (self.stack * 3, 1080, 1920), # impossible :)
+            dtype=np.float32
+        )
 
         self.tracker_perturbed = cv2.TrackerCSRT_create() # use a global tracker for perturbed frames
         self.tracker_lq = cv2.TrackerCSRT_create() # use another global tracker for lq frames
@@ -366,3 +372,12 @@ class VideoEnv(Env):
     #         print(f"[DEBUG] Visualizing the {frame_id}th frame from directory: {visualize_dir}")
     #     print(f"[INFO] Done visualization of perturbed frames {seed} in directory {visualize_dir}")
 
+if __name__ == "__main__":
+    env = VideoEnv(encoder="DBCNN")
+    # Fake sliding window for test: random frames in [0,1]
+    H, W = 360, 640
+    env.sliding_window = [np.random.rand(3, H, W).astype(np.float32) for _ in range(env.stack)]
+
+    obs = env._get_obs()
+    print("obs.shape:", obs.shape)  # should be (stack, 640)
+    print("obs dtype:", obs.dtype)

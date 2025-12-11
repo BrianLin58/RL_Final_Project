@@ -7,7 +7,8 @@ from gymnasium.envs.registration import register
 
 import stable_baselines3
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
+
 from stable_baselines3 import A2C, DDPG, DQN, PPO, SAC, TD3
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
@@ -196,7 +197,7 @@ def train(eval_env, model, cfg):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_path", type = str, default = "config/default.yaml")
+    parser.add_argument("--config_path", type = str, default = "config/medium_1.yaml")
     args = parser.parse_args()
     with open(args.config_path, 'r') as f:
         cfg = yaml.safe_load(f)
@@ -205,6 +206,20 @@ if __name__ == "__main__":
     train_env = SubprocVecEnv([make_env(cfg) for _ in range(cfg["train"]["num_train_envs"])])#my_config["num_train_envs"])])
 
     eval_env = DummyVecEnv([make_env(cfg)])
+    train_env = VecNormalize(
+        train_env,
+        norm_obs=False,        # you can switch to True later, but RL on embeddings may not need it
+        norm_reward=True,      # ★ the important part
+        clip_reward=10.0       # prevents exploding gradients; tune as needed
+    )
+
+    # For eval, enable reward normalization but disable updating running stats
+    eval_env = VecNormalize(
+        eval_env,
+        training=False,        # do not update running mean/std
+        norm_obs=False,
+        norm_reward=True
+    )
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # print(f"Using device: {device}")
