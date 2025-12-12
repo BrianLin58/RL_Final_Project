@@ -202,10 +202,11 @@ if __name__ == "__main__":
     with open(args.config_path, 'r') as f:
         cfg = yaml.safe_load(f)
 
-    # TODO: normalize reward
     train_env = SubprocVecEnv([make_env(cfg) for _ in range(cfg["train"]["num_train_envs"])])#my_config["num_train_envs"])])
 
     eval_env = DummyVecEnv([make_env(cfg)])
+
+    # reward normalization
     train_env = VecNormalize(
         train_env,
         norm_obs=False,        # you can switch to True later, but RL on embeddings may not need it
