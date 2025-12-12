@@ -3,3 +3,4 @@ wandb
 tensorboard
 opencv-python
 opencv-contrib-python
+pyiqa

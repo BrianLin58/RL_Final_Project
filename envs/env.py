@@ -161,6 +161,16 @@ class VideoEnv(Env):
                 print(f"[WARNING] Failed to track The {idx}th lq frame. Using previous value.")
         print(f"[DEBUG] Finished tracking all lq frames for {self.sample_dir}")
 
+        # After init, tracker has already consumed frames [0 .. stack-1].
+        # We want the next action to apply to frame index = self.frame_index (currently == stack),
+        # so shift window and append the next raw LQ frame (unseen by perturbed tracker).
+
+        if self.frame_index < self.video_length:
+            self.sliding_window.pop(0)
+            next_bgr = self.all_lq_frames[self.frame_index]
+            self.frame_index += 1
+            self.sliding_window.append(self._preprocess(next_bgr, resize=False))
+        
         return self._get_obs(), {}
 
 
@@ -170,56 +180,98 @@ class VideoEnv(Env):
         truncate = False
         info = {}
         
-        if self.current_action is None or self.action_counter >= self.action_repeat:
-            self.current_action = action
-            self.action_counter = 0
-        self.action_counter += 1
+        if self.frame_index >= self.video_length:
+            done = True
+            return self._get_obs(), 0.0, done, truncate, info
+        
+        self.current_action = action
+        last_processed_idx = None
+        
+        # if self.current_action is None or self.action_counter >= self.action_repeat:
+        #     self.current_action = action
+        #     self.action_counter = 0
+        # self.action_counter += 1
         
         # Apply enhancements to current frame based on action
         # TODO: apply on 32 frames, use concatanated tensor
-        self.sliding_window[-1] = self._apply_enhancements(self.sliding_window[-1], self.current_action) # RGB, CHW
-
-        self.all_perturbed_frames.append(self._postprocess(self.sliding_window[-1]))
-
-        # TODO: visualize 32 frames at once
-        if self.vis_flag:
-            cv2.imwrite(os.path.join(self.visualize_dir, 'perturbed', f"{(self.frame_index):08d}.jpg"), self.all_perturbed_frames[-1])
-            print(f"[DEBUG] Visualized perturbed frame {self.frame_index}")
-            cv2.imwrite(os.path.join(self.visualize_dir, 'lq', f"{(self.frame_index):08d}.jpg"), self.all_lq_frames[self.frame_index - 1])
-            print(f"[DEBUG] Visualized lq frame {self.frame_index}")
+        for k in range(self.action_repeat):
+            cur_idx = self.frame_index - 1  # index of the frame being processed
+            if k == 0:
+                print(f"[DEBUG] First frame index of the chunk {cur_idx} (action repeat {k+1}/{self.action_repeat})")
+            if cur_idx >= self.video_length:
+                print(f"[DEBUG] Last frame index of the chunk {cur_idx} (action repeat {k+1}/{self.action_repeat})")
+                done = True
+                break
             
-
-        print(f"[DEBUG] One step applied on self.sample_dir = {self.sample_dir}")
-        
-        if self.frame_index >= self.video_length - 1:
-            print(f"[DEBUG] Calculating reward for the {self.frame_index}th frame (action_counter: {self.action_counter}).") #3
- 
-            miou_before = calc_miou_from_boxes(self.gt_boxes, self.lq_boxes, self.frame_index)
-
-            success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[-1]) # also append predicted boxes of initial frames
+            enhanced_frame = self._apply_enhancements(self.sliding_window[-1], self.current_action) # RGB, CHW
+            self.sliding_window[-1] = enhanced_frame
+            
+            enhanced_bgr = self._postprocess(enhanced_frame) # BGR, HWC
+            if cur_idx < len(self.all_perturbed_frames):
+                self.all_perturbed_frames[cur_idx] = enhanced_bgr
+            else:
+                self.all_perturbed_frames.append(enhanced_bgr)
+            
+            success, bbox = self.tracker_perturbed.update(enhanced_bgr)
             if success:
                 self.perturbed_boxes.append(bbox)
             else:
                 self.perturbed_boxes.append(self.perturbed_boxes[-1])
-                print(f"[WARNING] Failed to track the {self.frame_index}th perturbed frame. Using previous value.")
+                print(f"[WARNING] Failed to track the {cur_idx}th perturbed frame during action repeat. Using previous value."  )
+            
+            last_processed_idx = cur_idx
+        # self.sliding_window[-1] = self._apply_enhancements(self.sliding_window[-1], self.current_action) # RGB, CHW
+
+        # self.all_perturbed_frames.append(self._postprocess(self.sliding_window[-1]))
+
+            # TODO: visualize 32 frames at once
+            if self.vis_flag:
+                cv2.imwrite(os.path.join(self.visualize_dir, 'perturbed', f"{(self.frame_index):08d}.jpg"), self.all_perturbed_frames[-1])
+                print(f"[DEBUG] Visualized perturbed frame {self.frame_index}")
+                cv2.imwrite(os.path.join(self.visualize_dir, 'lq', f"{(self.frame_index):08d}.jpg"), self.all_lq_frames[self.frame_index - 1])
+                print(f"[DEBUG] Visualized lq frame {self.frame_index}")
+            
+            if self.frame_index >= self.video_length:
+                done = True
+                print(f"[DEBUG] Last frame index of the chunk {cur_idx} (action repeat {k+1}/{self.action_repeat})")
+                break
+            
+            next_bgr = self.all_lq_frames[self.frame_index]
+            self.frame_index += 1
+            self.sliding_window.pop(0)
+            self.sliding_window.append(self._preprocess(next_bgr, resize = False))
+
+        print(f"[DEBUG] One step applied on self.sample_dir = {self.sample_dir}")
+        
+        if self.frame_index >= self.video_length - 1 and last_processed_idx is not None:
+            print(f"[DEBUG] Calculating reward for the {self.frame_index}th frame (action_counter: {self.action_counter}).") #3
+ 
+            miou_before = calc_miou_from_boxes(self.gt_boxes, self.lq_boxes, self.frame_index)
+
+            # success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[-1]) # also append predicted boxes of initial frames
+            # if success:
+            #     self.perturbed_boxes.append(bbox)
+            # else:
+            #     self.perturbed_boxes.append(self.perturbed_boxes[-1])
+            #     print(f"[WARNING] Failed to track the {self.frame_index}th perturbed frame. Using previous value.")
             miou_after = calc_miou_from_boxes(self.gt_boxes, self.perturbed_boxes, self.frame_index)
             reward = miou_after - miou_before
         
             print(f"reward = {reward}")
         else:
-            success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[-1])
-            if success:
-                self.perturbed_boxes.append(bbox)
-            else:
-                self.perturbed_boxes.append(self.perturbed_boxes[-1])
-                print(f"[WARNING] Failed to track the {self.frame_index}th perturbed frame. Using previous value.")
+            # success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[-1])
+            # if success:
+            #     self.perturbed_boxes.append(bbox)
+            # else:
+            #     self.perturbed_boxes.append(self.perturbed_boxes[-1])
+            #     print(f"[WARNING] Failed to track the {self.frame_index}th perturbed frame. Using previous value.")
             reward = 0.0
         
         info = {
             'action': action,
-            'frame_index': self.frame_index,
-            'action_counter': self.action_counter,
-            'is_reward_frame': self.action_counter >= self.action_repeat
+            'last_processed_idx': last_processed_idx,
+            'next_frame_index': self.frame_index,
+            'chunk_size': self.action_repeat
         }
         
         # read next frame
@@ -228,11 +280,11 @@ class VideoEnv(Env):
             done = True # end of video
 
         # TODO: jump 32 frames
-        else:
-            self.sliding_window.pop(0)
-            self.image = self.all_lq_frames[self.frame_index]
-            self.frame_index += 1 # too disgusting # I'm sorry :(
-            self.sliding_window.append(self._preprocess(self.image, resize = False))
+        # else:
+        #     self.sliding_window.pop(0)
+        #     self.image = self.all_lq_frames[self.frame_index]
+        #     self.frame_index += 1 # too disgusting # I'm sorry :(
+        #     self.sliding_window.append(self._preprocess(self.image, resize = False))
 
         return self._get_obs(), reward, done, truncate, info
 

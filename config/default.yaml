@@ -18,8 +18,8 @@ train:
   n_steps: 2
   data_root: "data/GOT10/train"
   stack: 3
-  action_repeat: 5
-
+  action_repeat: 32
+  encoder: "ResNet18"
 valid:
   data_root: "data/GOT10/val"
 
