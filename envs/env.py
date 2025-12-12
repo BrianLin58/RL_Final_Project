@@ -205,7 +205,7 @@ class VideoEnv(Env):
         # self.action_counter += 1
         
         # Apply enhancements to current frame based on action
-        # TODO: apply on 32 frames, use concatanated tensor
+        # apply on 32 frames, use concatanated np.ndarray
         frames = np.array(self.all_lq_frames[self.frame_index:min(self.frame_index + self.action_repeat, self.video_length)], dtype=np.uint8)
         enhanced_frames = self._apply_enhancements(frames, self.current_action)
         for k in range(enhanced_frames.shape[0]):
@@ -249,7 +249,7 @@ class VideoEnv(Env):
 
         # self.all_perturbed_frames.append(self._postprocess(self.sliding_window[-1]))
 
-        # TODO: visualize 32 frames at once -> done when done = True
+        # visualize 32 frames at once -> done when done = True
         # if self.vis_flag:
         #     cv2.imwrite(os.path.join(self.visualize_dir, 'perturbed', f"{(self.frame_index):08d}.jpg"), self.all_perturbed_frames[-1])
         #     print(f"[DEBUG] Visualized perturbed frame {self.frame_index}")
@@ -305,7 +305,6 @@ class VideoEnv(Env):
         #     # self.close()
         #     done = True # end of video
 
-        # TODO: jump 32 frames
         # else:
         #     self.sliding_window.pop(0)
         #     self.image = self.all_lq_frames[self.frame_index]
