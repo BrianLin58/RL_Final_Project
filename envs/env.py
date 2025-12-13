@@ -12,6 +12,7 @@ from encoder.placeholder_encoder import PlaceholderEncoder, ResNet18Encoder
 from encoder.dbcnn_feature_wrapper import DBCNNEncoder
 from calc_similarity import calc_miou_from_boxes
 
+
 class VideoEnv(Env):
     def __init__(self, data_dir="data/GOT10/train", val_dir = "data/GOT10/val", frame_size=60, stack=3, action_repeat=32, encoder = None):
         self.data_dir = data_dir      # path to training data directory
@@ -79,8 +80,18 @@ class VideoEnv(Env):
             dtype=np.float32
         )
 
-        self.tracker_perturbed = cv2.TrackerCSRT_create() # use a global tracker for perturbed frames
-        self.tracker_lq = cv2.TrackerCSRT_create() # use another global tracker for lq frames
+        try:
+            self.tracker_perturbed = cv2.TrackerCSRT_create()
+        except AttributeError:
+            self.tracker_perturbed = cv2.legacy.TrackerCSRT_create()
+
+        try:
+            self.tracker_lq = cv2.TrackerCSRT_create()
+        except AttributeError:
+            self.tracker_lq = cv2.legacy.TrackerCSRT_create()
+
+        # self.tracker_perturbed = cv2.TrackerCSRT_create() # use a global tracker for perturbed frames
+        # self.tracker_lq = cv2.TrackerCSRT_create() # use another global tracker for lq frames
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -143,8 +154,8 @@ class VideoEnv(Env):
         self.tracker_perturbed.init(self.all_perturbed_frames[0], self.gt_boxes[0])
         self.perturbed_boxes.append(self.gt_boxes[0]) # pred_box[0] = gt_box[0]
         print(f"[DEBUG] Tracking {self.sample_dir}'s initial {self.stack} frames...")
-        for idx in range(1, self.stack):
-            success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[idx-1]) # also append predicted boxes of initial frames
+        for idx in range(1, self.stack - 1):
+            success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[idx]) # also append predicted boxes of initial frames
             if success:
                 self.perturbed_boxes.append(bbox)
             else:
@@ -206,7 +217,7 @@ class VideoEnv(Env):
         
         # Apply enhancements to current frame based on action
         # apply on 32 frames, use concatanated np.ndarray
-        frames = np.array(self.all_lq_frames[self.frame_index:min(self.frame_index + self.action_repeat, self.video_length)], dtype=np.uint8)
+        frames = np.array(self.all_lq_frames[self.frame_index : min(self.frame_index + self.action_repeat, self.video_length)], dtype=np.uint8)
         enhanced_frames = self._apply_enhancements(frames, self.current_action)
         for k in range(enhanced_frames.shape[0]):
             success, bbox = self.tracker_perturbed.update(enhanced_frames[k])
