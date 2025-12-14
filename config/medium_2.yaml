@@ -1,21 +1,21 @@
 tensorboard:
-  run_id: "medium_test"
+  run_id: "medium_test_time_mini_6"
 wandb:
   enabled: true
-  run_id: "medium_test"
+  run_id: "medium_test_time_mini_6"
   project: "rl_final"
   sync_tensorboard: true
 
 train:
   algorithm: "PPO"
   policy_network: "MlpPolicy"
-  save_path: "model/medium_test"
+  save_path: "model/medium_test_time_mini_6"
   num_train_envs: 4
   epoch_num: 100
-  timesteps_per_epoch: 1024
+  timesteps_per_epoch: 128
   eval_episode_num: 5
-  batch_size: 4
-  n_steps: 512
+  batch_size: 2
+  n_steps: 32
   data_root: "data/GOT10_medium/train"
   stack: 3
   action_repeat: 32

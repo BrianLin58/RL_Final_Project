@@ -147,6 +147,10 @@ def train(eval_env, model, cfg):
         model.learn(
             total_timesteps = config["timesteps_per_epoch"],
             reset_num_timesteps = False,
+            callback= WandbCallback(
+                gradient_save_freq=100,
+                verbose=2,
+            ) if cfg["wandb"]["enabled"] else None,
         )
 
         epoch_duration = time.time() - epoch_start_time
@@ -267,6 +271,7 @@ if __name__ == "__main__":
     
     if cfg["wandb"]["enabled"]:
         import wandb
+        from wandb.integration.sb3 import WandbCallback
         run = wandb.init(
             project = cfg["wandb"]["project"],
             name = cfg["wandb"]["run_id"],

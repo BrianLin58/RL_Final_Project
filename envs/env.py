@@ -3,7 +3,7 @@ import cv2
 import copy
 import torch
 import random
-import tempfile
+import time
 import numpy as np
 from gymnasium import Env, spaces
 from get_reward import evaluate_sequence_miou, evaluate_sequence_miou_from_frames
@@ -55,6 +55,7 @@ class VideoEnv(Env):
         # self.image = None              # current frame in full resolution
         self.all_lq_frames = []        # stores BGR, HWC data
         self.all_perturbed_frames = [] # stores BGR, HWC data
+        self.episode_start_time = 0
 
         
         if encoder == "ResNet18":
@@ -95,6 +96,8 @@ class VideoEnv(Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+        self.episode_start_time = time.time()
+        reset_start_time = time.time()
 
         # random select a video
         if options is None: # training mode
@@ -119,6 +122,7 @@ class VideoEnv(Env):
 
         self.lq_dir = os.path.join(self.sample_dir, "degraded")
         self.lq_frame_paths = [f for f in os.listdir(self.lq_dir) if f.endswith(".jpg")]
+        self.lq_frame_paths.sort()
         self.lq_frame_paths = [os.path.join(self.lq_dir, f) for f in self.lq_frame_paths] # self.lq_frame_paths is a list of paths to low quality jpg
         self.gt_boxes, _ = parse_bbox_from_files(os.path.join(self.sample_dir, "groundtruth.txt"))
         # print(f"[DEBUG] Getting groundtruth bbox...")
@@ -126,9 +130,6 @@ class VideoEnv(Env):
         self.video_length = len(self.lq_frame_paths)
         if self.video_length < self.stack:
             raise RuntimeError("The video is shorter than the sliding window.")
-        # self.close()  # clean up previous temp dir if any
-        # self.tmp_dir = tempfile.TemporaryDirectory()
-        # print(f"[DEBUG] Created temporary directory at {self.tmp_dir.name}")
 
         self.all_lq_frames = [] # stores BGR, HWC data
         for frame_path in self.lq_frame_paths:
@@ -151,31 +152,27 @@ class VideoEnv(Env):
         #     self.sliding_window.append(self._preprocess(self.image, resize = False))
 
         # initialize tracker
-        self.tracker_perturbed.init(self.all_perturbed_frames[0], self.gt_boxes[0])
+        try:
+            self.tracker_perturbed.init(self.all_perturbed_frames[0], self.gt_boxes[0])
+        except cv2.error as e:
+            print("[WARNING] Tracker init failed. Skipping frame.")
+            print("Sequence:", self.sample_dir)
+            print("Frame shape:", self.all_perturbed_frames[0].shape)
+            print("GT box:", self.gt_boxes[0])
+            # fallback behavior
+            return self.reset()  # or return 0-reward frame
+        
         self.perturbed_boxes.append(self.gt_boxes[0]) # pred_box[0] = gt_box[0]
-        print(f"[DEBUG] Tracking {self.sample_dir}'s initial {self.stack} frames...")
+        # print(f"[DEBUG] Tracking {self.sample_dir}'s initial {self.stack} frames...")
         for idx in range(1, self.stack - 1):
             success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[idx]) # also append predicted boxes of initial frames
             if success:
                 self.perturbed_boxes.append(bbox)
             else:
                 self.perturbed_boxes.append(self.perturbed_boxes[-1])
-                print(f"[WARNING] Failed to track the {idx+1}th lq frame. Using previous value.")
+                # print(f"[WARNING] Failed to track the {idx+1}th lq frame. Using previous value.")
 
-        # finish all lq boxes predict upon init
-        self.tracker_lq.init(self.all_lq_frames[0], self.gt_boxes[0])
-        self.lq_boxes.append(self.gt_boxes[0])
-        print(f"[DEBUG] Tracking ALL lq frames for {self.sample_dir}...")
-        print(f"[DEBUG] Tracking 1th frame...")
-        for idx in range(1, self.video_length):
-            success, bbox = self.tracker_lq.update(self.all_lq_frames[idx])
-            print(f"[DEBUG] Tracking {idx+1}th frame...")
-            if success:
-                self.lq_boxes.append(bbox)
-            else:
-                self.lq_boxes.append(self.lq_boxes[-1])
-                print(f"[WARNING] Failed to track The {idx+1}th lq frame. Using previous value.")
-        print(f"[DEBUG] Finished tracking all lq frames for {self.sample_dir}")
+
 
         # After init, tracker has already consumed frames [0 .. stack-1].
         # We want the next action to apply to frame index = self.frame_index (currently == stack),
@@ -186,6 +183,9 @@ class VideoEnv(Env):
         #     next_bgr = self.all_lq_frames[self.frame_index]
         #     self.frame_index += 1
         #     self.sliding_window.append(self._preprocess(next_bgr, resize=False))
+        reset_end_time = time.time()
+        reset_time = reset_end_time - reset_start_time
+        print(f"[DEBUG] The time taken for reset is {reset_time}.")
         
         return self._get_obs(), {}
 
@@ -195,17 +195,9 @@ class VideoEnv(Env):
         done = False
         truncate = False
         info = {}
+        step_start_time = time.time()
         
-        if self.frame_index >= self.video_length:
-            if self.vis_flag:
-                for i in range(self.video_length):
-                    cv2.imwrite(os.path.join(self.visualize_dir, 'perturbed', f"{(i+1):08d}.jpg"), self.all_perturbed_frames[i])
-                    print(f"[DEBUG] Visualized perturbed frame {i+1}")
-                    cv2.imwrite(os.path.join(self.visualize_dir, 'lq', f"{(i+1):08d}.jpg"), self.all_lq_frames[i])
-                    print(f"[DEBUG] Visualized lq frame {i+1}")
 
-            done = True
-            return self._get_obs(), 0.0, done, truncate, info
         
         self.current_action = action
         last_processed_idx = None
@@ -283,6 +275,21 @@ class VideoEnv(Env):
         if self.frame_index >= self.video_length:
             print(f"[DEBUG] Calculating reward for the {self.frame_index}th frame (action_counter: {self.action_counter}).") #3
  
+            # track all lq boxes when the episode is finished
+            self.tracker_lq.init(self.all_lq_frames[0], self.gt_boxes[0])
+            self.lq_boxes.append(self.gt_boxes[0])
+            print(f"[DEBUG] Tracking ALL lq frames for {self.sample_dir}...")
+            # print(f"[DEBUG] Tracking 1th frame...")
+            for idx in range(1, self.video_length):
+                success, bbox = self.tracker_lq.update(self.all_lq_frames[idx])
+                # print(f"[DEBUG] Tracking {idx+1}th frame...")
+                if success:
+                    self.lq_boxes.append(bbox)
+                else:
+                    self.lq_boxes.append(self.lq_boxes[-1])
+                    # print(f"[WARNING] Failed to track The {idx+1}th lq frame. Using previous value.")
+            print(f"[DEBUG] Finished tracking all lq frames for {self.sample_dir}")
+ 
             miou_before = calc_miou_from_boxes(self.gt_boxes, self.lq_boxes, self.frame_index)
 
             # success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[-1]) # also append predicted boxes of initial frames
@@ -293,8 +300,21 @@ class VideoEnv(Env):
             #     print(f"[WARNING] Failed to track the {self.frame_index}th perturbed frame. Using previous value.")
             miou_after = calc_miou_from_boxes(self.gt_boxes, self.perturbed_boxes, self.frame_index)
             reward = miou_after - miou_before
-        
-            print(f"reward = {reward}")
+            if self.vis_flag:
+                for i in range(self.video_length):
+                    cv2.imwrite(os.path.join(self.visualize_dir, 'perturbed', f"{(i+1):08d}.jpg"), self.all_perturbed_frames[i])
+                    # print(f"[DEBUG] Visualized perturbed frame {i+1}")
+                    cv2.imwrite(os.path.join(self.visualize_dir, 'lq', f"{(i+1):08d}.jpg"), self.all_lq_frames[i])
+                    # print(f"[DEBUG] Visualized lq frame {i+1}")
+
+            done = True
+            step_end_time = time.time()
+            step_time = step_end_time - step_start_time
+            episode_time = step_end_time - self.episode_start_time
+            print(f"[DEBUG] Time spent for an ending step is {step_time}.")        
+            print(f"[INFO] reward = {reward}")
+            print(f"[INFO] Episode time for {self.sample_dir} is {episode_time}")
+
         else:
             # success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[-1])
             # if success:
@@ -303,6 +323,9 @@ class VideoEnv(Env):
             #     self.perturbed_boxes.append(self.perturbed_boxes[-1])
             #     print(f"[WARNING] Failed to track the {self.frame_index}th perturbed frame. Using previous value.")
             reward = 0.0
+            step_end_time = time.time()
+            step_time = step_end_time - step_start_time
+            print(f"[DEBUG] Time spent on a non-ending step is {step_time}")
         
         info = {
             'action': action,
@@ -321,6 +344,7 @@ class VideoEnv(Env):
         #     self.image = self.all_lq_frames[self.frame_index]
         #     self.frame_index += 1 # too disgusting # I'm sorry :(
         #     self.sliding_window.append(self._preprocess(self.image, resize = False))
+
 
         return self._get_obs(), reward, done, truncate, info
 
