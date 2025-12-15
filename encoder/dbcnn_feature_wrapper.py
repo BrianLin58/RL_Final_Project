@@ -36,32 +36,33 @@ class DBCNNWithFeature(DBCNN):
         """
         assert use_x1 or use_x2, "At least one of use_x1/use_x2 must be True."
 
-        X1, X2 = self._extract_backbone_features(X)
+        # X1, X2 = self._extract_backbone_features(X)
+        X2 = self.features2(self.preprocess(X))
 
         # 1) Compute original DBCNN score (bilinear pooling), mainly for sanity
-        N, C1, H, W = X1.shape
-        _, C2, _, _ = X2.shape
+        # N, C1, H, W = X1.shape
+        N, C2, H, W = X2.shape
 
-        X1_flat = X1.view(N, C1, H * W)
+        # X1_flat = X1.view(N, C1, H * W)
         X2_flat = X2.view(N, C2, H * W)
-        Xb = torch.bmm(X1_flat, X2_flat.transpose(1, 2)) / (H * W)
-        Xb = Xb.view(N, C1 * C2)
+        # Xb = torch.bmm(X1_flat, X2_flat.transpose(1, 2)) / (H * W)
+        # Xb = Xb.view(N, C1 * C2)
 
-        feat_big = torch.sqrt(Xb + 1e-8)
-        feat_big = F.normalize(feat_big)
-        score = self.fc(feat_big)  # (N, 1)
+        # feat_big = torch.sqrt(Xb + 1e-8)
+        # feat_big = F.normalize(feat_big)
+        # score = self.fc(feat_big)  # (N, 1)
 
         # 2) Build compact GAP feature
         feat_parts = []
-        if use_x1:
-            gap1 = F.adaptive_avg_pool2d(X1, 1).view(N, C1)  # (N, 512)
-            feat_parts.append(gap1)
+        # if use_x1:
+        #     gap1 = F.adaptive_avg_pool2d(X1, 1).view(N, C1)  # (N, 512)
+        #     feat_parts.append(gap1)
         if use_x2:
             gap2 = F.adaptive_avg_pool2d(X2, 1).view(N, C2)  # (N, 128)
             feat_parts.append(gap2)
 
         feat_small = torch.cat(feat_parts, dim=1)  # (N, 640 or 128)
-        return score, feat_small
+        return None, feat_small
 
 
 class DBCNNEncoder(nn.Module):
