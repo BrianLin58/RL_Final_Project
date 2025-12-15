@@ -11,11 +11,13 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNorm
 
 from stable_baselines3 import A2C, DDPG, DQN, PPO, SAC, TD3
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+from stable_baselines3.common.callbacks import CallbackList
 
 import torch
 import torch.nn as nn
 import numpy as np
 from envs.env import VideoEnv
+from callbacks.action_logging_callback import ActionLoggingCallback
 
 class Map3DCNN(BaseFeaturesExtractor):
     """
@@ -140,18 +142,37 @@ def train(eval_env, model, cfg):
     best_reward = -100
 
     start_time = time.time()
+    callbacks = []
+
+    # wandb callback (optional)
+    if cfg["wandb"]["enabled"]:
+        from wandb.integration.sb3 import WandbCallback
+        callbacks.append(
+            WandbCallback(
+                gradient_save_freq=100,
+                verbose=2,
+            )
+        )
+
+    # action logging callback (optional)
+    action_logger = None
+    if cfg.get("action_logging", {}).get("enabled", False):
+        log_path = cfg["action_logging"].get("log_path", "logs/actions/actions.csv")
+        action_logger = ActionLoggingCallback(log_path=log_path)
+        callbacks.append(action_logger)
+    
+    callback = CallbackList(callbacks) if len(callbacks) > 0 else None
 
     for epoch in range(config["epoch_num"]):
         epoch_start_time = time.time()
+        
+        if action_logger is not None:
+            action_logger.set_epoch(epoch)
 
         model.learn(
-            total_timesteps = config["timesteps_per_epoch"],
-            reset_num_timesteps = False,
-            callback= WandbCallback(
-                gradient_save_freq=100,
-                verbose=2,
-            ) if cfg["wandb"]["enabled"] else None,
-            # log_interval = 1
+            total_timesteps=config["timesteps_per_epoch"],
+            reset_num_timesteps=False,
+            callback=callback,
         )
 
         epoch_duration = time.time() - epoch_start_time
@@ -269,6 +290,7 @@ if __name__ == "__main__":
             gae_lambda=0.95,
             clip_range=0.2,
         )
+    
     
     if cfg["wandb"]["enabled"]:
         import wandb

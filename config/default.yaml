@@ -6,6 +6,10 @@ wandb:
   project: "rl_final"
   sync_tensorboard: true
 
+action_logging:
+  enabled: true
+  log_path: "logs/actions/actions.csv"
+
 train:
   algorithm: "PPO"
   policy_network: "MlpPolicy"
