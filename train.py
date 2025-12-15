@@ -202,7 +202,7 @@ def train(eval_env, model, cfg):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_path", type = str, default = "config/medium_1.yaml")
+    parser.add_argument("--config_path", type = str, default = "config/default.yaml")
     args = parser.parse_args()
     with open(args.config_path, 'r') as f:
         cfg = yaml.safe_load(f)
