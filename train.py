@@ -4,6 +4,8 @@ import argparse
 import yaml
 import gymnasium as gym
 from gymnasium.envs.registration import register
+import os
+import csv
 
 import stable_baselines3
 from stable_baselines3.common.monitor import Monitor
@@ -18,6 +20,7 @@ import torch.nn as nn
 import numpy as np
 from envs.env import VideoEnv
 from callbacks.action_logging_callback import ActionLoggingCallback
+
 
 class Map3DCNN(BaseFeaturesExtractor):
     """
@@ -97,9 +100,30 @@ def make_env(cfg):
         )
     return _init
 
-def eval(env, model, eval_episode_num, visualize_index):
+def eval(env, model, eval_episode_num, visualize_index, cfg, epoch=0):
     """Evaluate the model and return avg_reward"""
+    action_log_cfg = cfg.get("action_logging", {})
+    log_actions = action_log_cfg.get("enabled", False) and action_log_cfg.get("log_eval", False)
+
+    log_path = action_log_cfg.get(
+        "eval_log_path", "logs/actions/actions_val.csv"
+    )
+
+    # 🔥 Only truncate at the FIRST epoch
+    if log_actions and epoch == 0:
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "epoch", "episode", "step", "env_id", "equalize",
+                "brightness", "contrast", "sharpen", "gamma",
+            ])
     total_reward = 0.0
+    f = None
+    writer = None
+    if log_actions:
+        f = open(log_path, "a", newline="")
+        writer = csv.writer(f)
 
     for seed in range(eval_episode_num):
         done = False
@@ -112,11 +136,18 @@ def eval(env, model, eval_episode_num, visualize_index):
             env.set_options([{"eval_id": seed}])
         obs = env.reset()
         ep_reward = 0.0
+        step = 0
 
         # Interact with env using old Gym API
         while not done:
             action, _state = model.predict(obs, deterministic=True)
+            if writer is not None:
+                for env_id in range(action.shape[0]):
+                    a = action[env_id]
+                    writer.writerow([
+                        epoch, seed, step, env_id, int(a[0]), int(a[1]), int(a[2]), int(a[3]), int(a[4])])
             obs, reward, done, info = env.step(action)
+            step += 1
             # Handle vectorized environment
             if isinstance(reward, (list, np.ndarray)):
                 ep_reward += reward[0]
@@ -127,6 +158,8 @@ def eval(env, model, eval_episode_num, visualize_index):
         # if seed in visualize_index:
             # env.envs[0].env.visualize(seed)
             # env.env_method("visualize", seed)
+    if f is not None:
+        f.close()
 
     return total_reward / eval_episode_num
 
@@ -153,7 +186,7 @@ def train(eval_env, model, cfg):
                 verbose=2,
             )
         )
-
+    
     # action logging callback (optional)
     action_logger = None
     if cfg.get("action_logging", {}).get("enabled", False):
@@ -180,7 +213,7 @@ def train(eval_env, model, cfg):
         # Evaluation
         print("[DEBUG] Start evaluation...")
         eval_start = time.time()
-        avg_reward = eval(eval_env, model, config["eval_episode_num"], cfg["visualize"]["index"])
+        avg_reward = eval(eval_env, model, config["eval_episode_num"], cfg["visualize"]["index"], cfg,epoch=epoch)
         eval_duration = time.time() - eval_start
 
         total_duration = time.time() - start_time

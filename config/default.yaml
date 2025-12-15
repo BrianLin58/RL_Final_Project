@@ -8,7 +8,9 @@ wandb:
 
 action_logging:
   enabled: true
-  log_path: "logs/actions/actions.csv"
+  log_path: logs/actions/actions_train.csv
+  log_eval: true
+  eval_log_path: logs/actions/actions_val.csv
 
 train:
   algorithm: "PPO"
