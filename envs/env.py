@@ -364,12 +364,6 @@ class VideoEnv(Env):
     #     return frame
     
     def _get_obs(self):
-        """
-        Build observation using encoder input resized by factor 2.
-        Full-resolution frames are still used for tracking & enhancement.
-        """
-
-        # 1. Decide which frames go into the state
         if self.frame_index >= self.video_length:
             state = self.all_perturbed_frames[-self.stack:]
         else:
@@ -378,30 +372,32 @@ class VideoEnv(Env):
             ]
 
         processed = []
+        ENC_SIZE = 224   # ← THIS is the key change (try 160 if still tight)
 
         for frame_bgr in state:
-            # 2. Preprocess: BGR HWC -> RGB CHW float32 [0,1]
-            chw = self._preprocess(frame_bgr, resize=False)  # (3, H, W)
+            # BGR HWC → RGB CHW [0,1]
+            chw = self._preprocess(frame_bgr, resize=False)
 
-            # 3. Downscale by factor 2 (H/2, W/2)
-            #    Do resize in HWC space (safer & faster)
-            hwc = np.transpose(chw, (1, 2, 0))  # (H, W, 3)
-            h, w = hwc.shape[:2]
-            hwc_small = cv2.resize(hwc, (w // 2, h // 2), interpolation=cv2.INTER_LINEAR)
-            chw_small = np.transpose(hwc_small, (2, 0, 1))  # (3, H/2, W/2)
+            # CHW → HWC
+            hwc = np.transpose(chw, (1, 2, 0))
 
+            # 🔥 FORCE small resolution
+            hwc_small = cv2.resize(
+                hwc, (ENC_SIZE, ENC_SIZE),
+                interpolation=cv2.INTER_LINEAR
+            )
+
+            chw_small = np.transpose(hwc_small, (2, 0, 1))
             processed.append(chw_small.astype(np.float32))
 
-        # 4. Stack into (stack, 3, H/2, W/2)
-        frames = np.stack(processed, axis=0)
+        frames = np.stack(processed, axis=0)  # (stack, 3, ENC_SIZE, ENC_SIZE)
 
-        # 5. Encode
         with torch.no_grad():
-            x = torch.from_numpy(frames).to(self.device)   # float32
-            obs = self.encoder(x)                           # (stack, feature_dim)
-            obs = obs.detach().cpu().numpy()
+            x = torch.from_numpy(frames).to(self.device)
+            obs = self.encoder(x).detach().cpu().numpy()
 
         return obs.astype(np.float32)
+
     
     def _apply_enhancements(self, frames, action):
         """
