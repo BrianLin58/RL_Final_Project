@@ -151,6 +151,7 @@ def train(eval_env, model, cfg):
                 gradient_save_freq=100,
                 verbose=2,
             ) if cfg["wandb"]["enabled"] else None,
+            # log_interval = 1
         )
 
         epoch_duration = time.time() - epoch_start_time

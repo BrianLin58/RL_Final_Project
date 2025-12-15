@@ -1,25 +1,25 @@
 tensorboard:
-  run_id: "medium_test_time_mini_9"
+  run_id: "medium_DBCNN"
 wandb:
   enabled: true
-  run_id: "medium_test_time_mini_9"
+  run_id: "medium_DBCNN"
   project: "rl_final"
   sync_tensorboard: true
 
 train:
   algorithm: "PPO"
   policy_network: "MlpPolicy"
-  save_path: "model/medium_test_time_mini_9"
+  save_path: "model/medium_DBCNN"
   num_train_envs: 4
   epoch_num: 100
   timesteps_per_epoch: 128
   eval_episode_num: 5
-  batch_size: 2
-  n_steps: 32
+  batch_size: 32
+  n_steps: 8
   data_root: "data/GOT10_medium/train"
   stack: 3
   action_repeat: 32
-  encoder: "ResNet18"
+  encoder: "DBCNN"
 
 valid:
   data_root: "data/GOT10_medium/val"

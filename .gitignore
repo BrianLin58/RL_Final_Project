@@ -15,3 +15,8 @@ wandb/**
 /data/*
 
 test_vis/**
+*.log
+logs/*
+test_degrade_log/*
+test_pipeline/*
+toy_dir/*
