@@ -131,6 +131,9 @@ class VideoEnv(Env):
         self.video_length = len(self.lq_frame_paths)
         if self.video_length < self.stack:
             raise RuntimeError("The video is shorter than the sliding window.")
+        
+        self.lq_boxes = []
+        self.perturbed_boxes = []
 
         self.all_lq_frames = [] # stores BGR, HWC data
         for frame_path in self.lq_frame_paths:
@@ -138,8 +141,20 @@ class VideoEnv(Env):
 
         self.all_perturbed_frames = [] # stores BGR, HWC data
 
-        self.lq_boxes = []
-        self.perturbed_boxes = []
+        # track all lq boxes when the episode starts
+        self.tracker_lq.init(self.all_lq_frames[0], self.gt_boxes[0])
+        self.lq_boxes.append(self.gt_boxes[0])
+        print(f"[DEBUG] Tracking ALL lq frames for {self.sample_dir}...")
+        # print(f"[DEBUG] Tracking 1th frame...")
+        for idx in range(1, self.video_length):
+            success, bbox = self.tracker_lq.update(self.all_lq_frames[idx])
+            # print(f"[DEBUG] Tracking {idx+1}th frame...")
+            if success:
+                self.lq_boxes.append(bbox)
+            else:
+                self.lq_boxes.append(self.lq_boxes[-1])
+                # print(f"[WARNING] Failed to track The {idx+1}th lq frame. Using previous value.")
+        print(f"[DEBUG] Finished tracking all lq frames for {self.sample_dir}")
 
         # read initial frames
         self.frame_index = self.stack - 1 # 2
@@ -197,8 +212,6 @@ class VideoEnv(Env):
         truncate = False
         info = {}
         step_start_time = time.time()
-        
-
         
         self.current_action = action
         last_processed_idx = None
@@ -271,36 +284,22 @@ class VideoEnv(Env):
         # self.sliding_window.append(self._preprocess(next_bgr, resize = False))
 
         print(f"[DEBUG] One step applied on self.sample_dir = {self.sample_dir}")
+
+        # calculate reward every steps from frame 0 to current frame_index
+        miou_before = calc_miou_from_boxes(self.gt_boxes, self.lq_boxes, self.frame_index)
+        miou_after  = calc_miou_from_boxes(self.gt_boxes, self.perturbed_boxes, self.frame_index)
+        reward = miou_after - miou_before
+        print(f"[DEBUG] Calculating reward for the {self.frame_index}th frame (action_counter: {self.action_counter}).") #3
+        print(f"[DEBUG] mIoU before enhancement: {miou_before}, mIoU after enhancement: {miou_after}, reward: {reward}")
         
         # if self.frame_index >= self.video_length - 1 and last_processed_idx is not None:
         if self.frame_index >= self.video_length:
-            print(f"[DEBUG] Calculating reward for the {self.frame_index}th frame (action_counter: {self.action_counter}).") #3
- 
-            # track all lq boxes when the episode is finished
-            self.tracker_lq.init(self.all_lq_frames[0], self.gt_boxes[0])
-            self.lq_boxes.append(self.gt_boxes[0])
-            print(f"[DEBUG] Tracking ALL lq frames for {self.sample_dir}...")
-            # print(f"[DEBUG] Tracking 1th frame...")
-            for idx in range(1, self.video_length):
-                success, bbox = self.tracker_lq.update(self.all_lq_frames[idx])
-                # print(f"[DEBUG] Tracking {idx+1}th frame...")
-                if success:
-                    self.lq_boxes.append(bbox)
-                else:
-                    self.lq_boxes.append(self.lq_boxes[-1])
-                    # print(f"[WARNING] Failed to track The {idx+1}th lq frame. Using previous value.")
-            print(f"[DEBUG] Finished tracking all lq frames for {self.sample_dir}")
- 
-            miou_before = calc_miou_from_boxes(self.gt_boxes, self.lq_boxes, self.frame_index)
-
             # success, bbox = self.tracker_perturbed.update(self.all_perturbed_frames[-1]) # also append predicted boxes of initial frames
             # if success:
             #     self.perturbed_boxes.append(bbox)
             # else:
             #     self.perturbed_boxes.append(self.perturbed_boxes[-1])
             #     print(f"[WARNING] Failed to track the {self.frame_index}th perturbed frame. Using previous value.")
-            miou_after = calc_miou_from_boxes(self.gt_boxes, self.perturbed_boxes, self.frame_index)
-            reward = miou_after - miou_before
             if self.vis_flag:
                 for i in range(self.video_length):
                     cv2.imwrite(os.path.join(self.visualize_dir, 'perturbed', f"{(i+1):08d}.jpg"), self.all_perturbed_frames[i])
@@ -323,7 +322,6 @@ class VideoEnv(Env):
             # else:
             #     self.perturbed_boxes.append(self.perturbed_boxes[-1])
             #     print(f"[WARNING] Failed to track the {self.frame_index}th perturbed frame. Using previous value.")
-            reward = 0.0
             step_end_time = time.time()
             step_time = step_end_time - step_start_time
             print(f"[DEBUG] Time spent on a non-ending step is {step_time}")
