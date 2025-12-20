@@ -116,7 +116,8 @@ class VideoEnv(Env):
             print(f"[DEBUG] self.vis_flag is {self.vis_flag}")
             if self.vis_flag:
                 print(f"[DEBUG] Will visualize {video_list[eval_id % len(video_list)]}")
-                self.visualize_dir = f"visualization_DBCNN/{video_list[eval_id % len(video_list)]}/"
+                epoch = options.get("epoch", 0)
+                self.visualize_dir = f"visualization_DBCNN_01/{video_list[eval_id % len(video_list)]}/ep{epoch}"
                 os.makedirs(os.path.join(self.visualize_dir, "lq"), exist_ok=True)
                 os.makedirs(os.path.join(self.visualize_dir, "perturbed"), exist_ok=True)
 

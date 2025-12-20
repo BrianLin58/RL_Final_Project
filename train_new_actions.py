@@ -18,8 +18,8 @@ from stable_baselines3.common.callbacks import CallbackList
 import torch
 import torch.nn as nn
 import numpy as np
-from envs.env import VideoEnv
-from callbacks.action_logging_callback import ActionLoggingCallback
+from envs.env_new_actions import VideoEnv
+from callbacks.action_logging_callback_new_actions import ActionLoggingCallback
 
 
 class Map3DCNN(BaseFeaturesExtractor):
@@ -115,8 +115,8 @@ def eval(env, model, eval_episode_num, visualize_index, cfg, epoch=0):
         with open(log_path, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow([
-                "epoch", "episode", "step", "env_id", "equalize",
-                "brightness", "contrast", "sharpen", "gamma",
+                "epoch", "episode", "step", "env_id", "denoise",
+                "deblock", "sharpen", "gamma", "CLAHE"
             ])
     total_reward = 0.0
     f = None

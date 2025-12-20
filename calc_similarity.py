@@ -67,7 +67,12 @@ def calc_miou_from_boxes(gt_boxes, pred_boxes, num_frames=None):
     else:
         n = min(num_frames, len(gt_boxes), len(pred_boxes))
 
-    ious = [iou(gt_boxes[i], pred_boxes[i]) for i in range(n)]
+    # ious = [iou(gt_boxes[i], pred_boxes[i]) for i in range(n)]
+    ious = []
+    for i in range(len(gt_boxes)):
+        single_iou = iou(gt_boxes[i], pred_boxes[i])
+        print(f"The {i}th frame has iou {single_iou}")
+        ious.append(single_iou)
     return float(sum(ious) / n)
 
 

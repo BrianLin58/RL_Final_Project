@@ -1,6 +1,18 @@
 import cv2
 from calc_similarity import calc_miou_from_boxes
 
+def save_pred_boxes(pred_boxes, save_path):
+    """
+    pred_boxes: list of (x, y, w, h)
+    save_path: output txt file path
+
+    Format: one bbox per line -> x,y,w,h
+    """
+    with open(save_path, "w") as f:
+        for box in pred_boxes:
+            x, y, w, h = box
+            f.write(f"{x:.3f},{y:.3f},{w:.3f},{h:.3f}\n")
+
 
 # --------------------------------------------------------
 # Track directly on list of NumPy frames
@@ -63,6 +75,10 @@ def evaluate_sequence_miou_from_frames(frames, gt_boxes, index=None):
         # print(f"[DEBUG] i, f.shape = {i}, {f.shape}")
 
     pred_boxes = run_opencv_tracker_on_frames(frames, init_bbox)
+    save_pred_boxes(
+        pred_boxes,
+        save_path="pred.txt"
+    )
 
     # Compute IoU
     miou = calc_miou_from_boxes(gt_boxes, pred_boxes, num_frames=index)
@@ -94,7 +110,7 @@ def evaluate_sequence_miou(seq_dir, gt_path, index=None):
     pred_path = run_opencv_tracker(
         frames_dir=seq_dir,
         init_bbox=init_bbox,
-        output_file="pred.txt",
+        output_file="pred_lq.txt",
     )
 
     # 2. Ground truth file is in parent folder
@@ -112,12 +128,13 @@ if __name__ == "__main__":
     import glob
 
     # Example: load frames manually just for test
-    frame_paths = sorted(glob.glob("data/GOT10/train/GOT-10k_Train_004921/original/*.jpg"))
+    frame_paths = sorted(glob.glob("visualization_DBCNN_01/GOT-10k_Val_000001/ep0/lq/*.jpg"))
+    # frame_paths = sorted(glob.glob("data/GOT10_medium/val/GOT-10k_Val_000001/degraded/*.jpg"))
     frames = [cv2.imread(p) for p in frame_paths]
 
     # Example ground truth
     gt_boxes = []
-    with open("data/GOT10/train/GOT-10k_Train_004921/groundtruth.txt", 'r') as f:
+    with open("data/GOT10_medium/val/GOT-10k_Val_000001/groundtruth.txt", 'r') as f:
         for line in f:
             line = line.strip()
             if not line:
