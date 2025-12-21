@@ -323,7 +323,7 @@ if __name__ == "__main__":
             gamma=0.99,
             gae_lambda=0.95,
             # clip_range=0.2, # eliminate for A2C
-            learning_rate = 7e-4,
+            learning_rate = 3e-4,
             ent_coef = 0.01,
             max_grad_norm = 0.5
         )

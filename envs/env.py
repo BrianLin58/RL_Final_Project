@@ -137,7 +137,12 @@ class VideoEnv(Env):
 
         self.all_lq_frames = [] # stores BGR, HWC data
         for frame_path in self.lq_frame_paths:
-            self.all_lq_frames.append(cv2.imread(frame_path))
+            frame = cv2.imread(frame_path, cv2.IMREAD_COLOR)  # Force 3-channel
+            if frame is None:
+                raise RuntimeError(f"Failed to load frame: {frame_path}")
+            if len(frame.shape) == 2:  # If still grayscale
+                frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+            self.all_lq_frames.append(frame)
 
         self.all_perturbed_frames = [] # stores BGR, HWC data
 
