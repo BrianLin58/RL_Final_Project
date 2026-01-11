@@ -1,0 +1,35 @@
+tensorboard:
+  run_id: "medium_DBCNN_01"
+wandb:
+  enabled: true
+  run_id: "medium_DBCNN_01"
+  project: "rl_final"
+  sync_tensorboard: true
+
+action_logging:
+  enabled: true
+  log_path: logs/actions/medium_DBCNN_01_train.csv
+  log_eval: true
+  eval_log_path: logs/actions/medium_DBCNN_01_val.csv
+
+train:
+  algorithm: "PPO"
+  policy_network: "MlpPolicy"
+  save_path: "model/medium_DBCNN"
+  num_train_envs: 8
+  epoch_num: 150
+  timesteps_per_epoch: 512
+  eval_episode_num: 180
+  batch_size: 32
+  n_steps: 128
+  data_root: "data/GOT10_medium/train"
+  stack: 3
+  action_repeat: 32
+  encoder: "DBCNN"
+
+valid:
+  data_root: "data/GOT10_medium/val"
+
+visualize:
+  index: []
+#   index: [0, 1, 2, 3, 4]

@@ -13,7 +13,7 @@ train:
   num_train_envs: 4
   epoch_num: 100
   timesteps_per_epoch: 128
-  eval_episode_num: 5
+  eval_episode_num: 180
   batch_size: 32
   n_steps: 8
   data_root: "data/GOT10_medium/train"
@@ -25,4 +25,4 @@ valid:
   data_root: "data/GOT10_medium/val"
 
 visualize:
-  index: [1]
+  index: []

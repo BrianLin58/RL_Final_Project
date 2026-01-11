@@ -1,0 +1,34 @@
+tensorboard:
+  run_id: "medium_dense_reward_PPO_DBCNN_3"
+wandb:
+  enabled: true
+  run_id: "medium_dense_reward_PPO_DBCNN_3"
+  project: "rl_final"
+  sync_tensorboard: true
+
+action_logging:
+  enabled: true
+  log_path: logs/actions/medium_dense_reward_PPO_DBCNN_train_3.csv
+  log_eval: true
+  eval_log_path: logs/actions/medium_dense_reward_PPO_DBCNN_val_3.csv
+
+train:
+  algorithm: "PPO"
+  policy_network: "MlpPolicy"
+  save_path: "model/medium_dense_reward_PPO_DBCNN_3"
+  num_train_envs: 4
+  epoch_num: 100
+  timesteps_per_epoch: 128
+  eval_episode_num: 180
+  batch_size: 64
+  n_steps: 128
+  data_root: "data/GOT10_medium/train"
+  stack: 3
+  action_repeat: 32
+  encoder: "DBCNN"
+
+valid:
+  data_root: "data/GOT10_medium/val"
+
+visualize:
+  index: [1]
